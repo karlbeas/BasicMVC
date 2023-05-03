@@ -1,0 +1,44 @@
+#--------------------------------------------------
+# Répertoire : /
+#--------------------------------------------------
+
+# Le serveur doit suivre les liens symboliques :
+Options +FollowSymlinks
+
+# Activation du module de réécriture d'URL :
+RewriteEngine on
+RewriteCond %{HTTPS} off
+RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+#--------------------------------------------------
+# Règles de réécriture d'URL :
+#--------------------------------------------------
+
+# Article sans numéro de page :
+RewriteRule ^([a-zA-Z0-9-_]+)$   main.php?I_controller=$1
+RewriteRule ^([a-zA-Z0-9-_]+)/$   main.php?I_controller=$1
+RewriteRule ^([a-zA-Z0-9-_]+)/([a-zA-Z0-9-_]+)$   main.php?I_controller=$1&I_method=$2
+RewriteRule ^([a-zA-Z0-9-_]+)/([a-zA-Z0-9-_]+)/$   main.php?I_controller=$1&I_method=$2
+RewriteRule ^([a-zA-Z0-9-_]+)/([a-zA-Z0-9-_]+)/([a-zA-Z0-9-_]+)$   main.php?I_controller=$1&I_method=$2&I_var=$3
+RewriteRule ^([a-zA-Z0-9-_]+)/([a-zA-Z0-9-_]+)/([a-zA-Z0-9-_]+)/$   main.php?I_controller=$1&I_method=$2&I_var=$3 [L]
+
+# BEGIN cPanel-generated php ini directives, do not edit
+# Manual editing of this file may result in unexpected behavior.
+# To make changes to this file, use the cPanel MultiPHP INI Editor (Home >> Software >> MultiPHP INI Editor)
+# For more information, read our documentation (https://go.cpanel.net/EA4ModifyINI)
+<IfModule php7_module>
+
+</IfModule>
+<IfModule lsapi_module>
+
+</IfModule>
+# END cPanel-generated php ini directives, do not edit
+
+<IfModule mod_headers.c>
+<FilesMatch "\.(png|jpg|jpeg|JPG|PNG|ttf|ttc|otf|eot|woff|woff2|font.css)$">
+Header set Access-Control-Allow-Origin "*"
+</FilesMatch>
+</IfModule>
+
+# php -- BEGIN cPanel-generated handler, do not edit
+# This domain inherits the “PHP” package.
+# php -- END cPanel-generated handler, do not edit
