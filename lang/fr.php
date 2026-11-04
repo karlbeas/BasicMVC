@@ -385,7 +385,7 @@ return [
     'ai.job.title' => 'Génération en cours',
     'ai.job.generating' => 'L\'IA prépare votre questionnaire…',
     'ai.job.revising' => 'L\'IA modifie votre questionnaire…',
-    'ai.job.wait' => 'Cela prend généralement 1 à 3 minutes. Vous pouvez quitter cette page : le travail continue.',
+    'ai.job.wait' => 'Cela prend généralement 1 à 2 minutes. Vous pouvez quitter cette page : le travail continue.',
     'ai.step.pending' => 'En file d\'attente…',
     'ai.step.plan' => 'Étape 1/3 : plan des sections',
     'ai.step.form' => 'Étape 2/3 : rédaction des questions',
@@ -455,4 +455,6 @@ return [
     'ai.job.retrying' => 'Tentative :attempt sur :max après un incident : :error',
     'ai.error.auth' => 'Clé API Mammouth refusée : vérifiez MAMMOUTH_API_KEY dans le fichier .env. Aucun crédit décompté.',
     'ai.error.bad_request' => 'Le service IA a refusé la demande (modèle inconnu ou paramètre invalide) : vérifiez les modèles AI_MODEL_* du fichier .env. Aucun crédit décompté.',
+    'ai.step.sections' => 'Étape 2/3 : rédaction des questions (section :current sur :total)',
+    'ai.job.long_running' => 'L\'étape en cours dure depuis :seconds s : l\'hébergeur a peut-être interrompu le traitement. Il sera relancé automatiquement (3 tentatives au maximum).',
 ];

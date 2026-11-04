@@ -53,6 +53,20 @@ final class AiStudioTest extends DatabaseTestCase
         return (string) file_get_contents($this->app->root . '/tests/fixtures/forms/valid/minimal.json');
     }
 
+    private const PLAN = '{"title": "Satisfaction", "sections": [{"name": "accord", "title": "Accord", "questions": 1}, {"name": "profil", "title": "Profil", "questions": 1}]}';
+
+    /** Section answers built from the minimal fixture (consent in section 1, age in section 2). */
+    private function sectionAnswer(int $n): string
+    {
+        $form = json_decode($this->minimalForm(), true);
+        $item = $form['items'][$n - 1];
+
+        return (string) json_encode([
+            'choice_lists' => $n === 1 ? $form['choice_lists'] : new \stdClass(),
+            'group' => ['kind' => 'group', 'name' => 's' . $n, 'label' => ['fr' => 'Section ' . $n, 'en' => 'Section ' . $n], 'items' => [$item]],
+        ]);
+    }
+
     /** @return array{0: AuthContext, 1: int} */
     private function accountWithProject(): array
     {
@@ -141,8 +155,9 @@ final class AiStudioTest extends DatabaseTestCase
     {
         [$ctx, $projectId] = $this->accountWithProject();
         $this->transport->responses = [
-            FakeTransport::ok('{"title": "Satisfaction", "sections": [{"name": "profil", "title": "Profil", "purpose": "segments", "questions": 2}]}'),
-            FakeTransport::ok("```json\n" . $this->minimalForm() . "\n```"),
+            FakeTransport::ok(self::PLAN),
+            FakeTransport::ok("```json\n" . $this->sectionAnswer(1) . "\n```"),
+            FakeTransport::ok($this->sectionAnswer(2)),
         ];
 
         $result = $this->runJob($ctx, 'ai.form_generate', $this->brief($ctx, $projectId));
@@ -152,16 +167,27 @@ final class AiStudioTest extends DatabaseTestCase
         $form = $this->db()->fetchOne('SELECT f.*, v.source, v.status FROM forms f JOIN form_versions v ON v.id = f.current_version_id WHERE f.public_id = ?', [$result->data['form_public_id']]);
         self::assertSame(['ai', 'draft'], [$form['source'] ?? null, $form['status'] ?? null]);
         self::assertSame(5, (new CreditLedger($this->db()))->summary($ctx->organizationId())['spent']);
-        self::assertCount(2, $this->transport->requests);
-        self::assertStringContainsString('Plan validé', (string) $this->transport->requests[1]['body']['messages'][1]['content'], 'The plan is passed to the second call');
+        self::assertCount(3, $this->transport->requests, 'one plan call + one short call per section');
+        $second = (string) $this->transport->requests[2]['body']['messages'][1]['content'];
+        self::assertStringContainsString('Plan complet', $second);
+        self::assertStringContainsString('(2/2)', $second);
+        self::assertStringContainsString('consent', $second, 'names already used are passed to the next section');
+        self::assertSame(3000, $this->transport->requests[1]['body']['max_tokens'], 'short section calls');
+        $schema = json_decode((string) $this->db()->fetchValue('SELECT v.schema_json FROM forms f JOIN form_versions v ON v.id = f.current_version_id WHERE f.public_id = ?', [$result->data['form_public_id']]), true);
+        self::assertSame(['s1', 's2'], array_column($schema['items'], 'name'));
+        self::assertSame("\${consent} = 'yes'", $schema['items'][1]['items'][0]['relevant']);
     }
 
     public function testInvalidOutputIsRepairedOnce(): void
     {
         [$ctx, $projectId] = $this->accountWithProject();
-        $broken = json_decode($this->minimalForm(), true);
-        unset($broken['settings']['title']);
-        $this->transport->responses = [FakeTransport::ok('{"sections": []}'), FakeTransport::ok((string) json_encode($broken)), FakeTransport::ok($this->minimalForm())];
+        $broken = json_decode($this->sectionAnswer(1), true);
+        $broken['group']['items'][0]['type'] = 'slider'; // structural error: no deterministic fix
+        $this->transport->responses = [
+            FakeTransport::ok('{"sections": [{"name": "a", "title": "A"}]}'),
+            FakeTransport::ok((string) json_encode($broken)),
+            FakeTransport::ok($this->minimalForm()),
+        ];
 
         $result = $this->runJob($ctx, 'ai.form_generate', $this->brief($ctx, $projectId));
 
@@ -170,12 +196,27 @@ final class AiStudioTest extends DatabaseTestCase
         self::assertStringContainsString('Erreurs', (string) $this->transport->requests[2]['body']['messages'][1]['content']);
     }
 
-    public function testStillInvalidAfterRepairFailsWithoutChargingOrSaving(): void
+    public function testCommonSlipsAreFixedWithoutARepairCall(): void
     {
         [$ctx, $projectId] = $this->accountWithProject();
-        $this->transport->responses = [FakeTransport::ok('{"sections": []}'), FakeTransport::ok('{"items": []}'), FakeTransport::ok('toujours pas de JSON')];
+        $section = json_decode($this->sectionAnswer(1), true);
+        $section['group']['items'][] = ['kind' => 'question', 'type' => 'select_one', 'name' => 'colour', 'label' => ['en' => 'Colour'], 'choices' => 'missing_list', 'relevant' => '${nope} = 1'];
+        $this->transport->responses = [FakeTransport::ok('{"sections": [{"name": "a", "title": "A"}]}'), FakeTransport::ok((string) json_encode($section))];
 
         $result = $this->runJob($ctx, 'ai.form_generate', $this->brief($ctx, $projectId));
+
+        self::assertArrayHasKey('form_public_id', $result->data, (string) json_encode($result->data));
+        self::assertCount(2, $this->transport->requests, 'no repair call needed');
+    }
+
+    public function testUnusableSectionAnswersStopWithoutChargingOrSaving(): void
+    {
+        [$ctx, $projectId] = $this->accountWithProject();
+        $this->transport->responses = [FakeTransport::ok('{"sections": [{"name": "a", "title": "A"}]}'), FakeTransport::ok('pas de JSON'), FakeTransport::ok('{"items": []}')];
+
+        $first = $this->runJob($ctx, 'ai.form_generate', $this->brief($ctx, $projectId));
+        self::assertSame('yield', $first->status, 'one unusable answer is retried');
+        $result = $this->runJob($ctx, 'ai.form_generate', $this->brief($ctx, $projectId), $first->data, 120, true, $this->lastJobId);
 
         self::assertSame('invalid_output', $result->data['error'] ?? null);
         self::assertSame(0, (new CreditLedger($this->db()))->summary($ctx->organizationId())['spent']);
@@ -193,18 +234,16 @@ final class AiStudioTest extends DatabaseTestCase
         self::assertSame([], $this->transport->requests);
     }
 
-    public function testWebRequestYieldsLongStepsToTheCron(): void
+    public function testAWebRequestAloneCanCompleteAGenerationWithShortCalls(): void
     {
         [$ctx, $projectId] = $this->accountWithProject();
-        $this->transport->responses = [FakeTransport::ok('{"sections": []}')];
+        $this->transport->responses = [FakeTransport::ok(self::PLAN), FakeTransport::ok($this->sectionAnswer(1)), FakeTransport::ok($this->sectionAnswer(2))];
 
-        // Web request with 28 s left (max_execution_time 30): the short plan step runs here...
+        // Web request with 28 s left (max_execution_time 30), no CRON involved.
         $result = $this->runJob($ctx, 'ai.form_generate', $this->brief($ctx, $projectId), null, 28, false);
 
-        // ...but the long questionnaire step is left to the CRON (it needs 90 s).
-        self::assertSame('yield', $result->status);
-        self::assertSame('form', $result->data['step']);
-        self::assertCount(1, $this->transport->requests);
+        self::assertArrayHasKey('form_public_id', $result->data);
+        self::assertCount(3, $this->transport->requests);
 
         // Too little time even for the plan: nothing is called.
         $this->transport->requests = [];
@@ -215,7 +254,7 @@ final class AiStudioTest extends DatabaseTestCase
     public function testRetryResumesFromTheSavedPlan(): void
     {
         [$ctx, $projectId] = $this->accountWithProject();
-        $this->transport->responses = [FakeTransport::ok('{"sections": [{"name": "a"}]}'), new AiException('timeout', 'AI API timeout after 120 s'), new AiException('timeout', 'AI API timeout after 120 s')];
+        $this->transport->responses = [FakeTransport::ok(self::PLAN), FakeTransport::ok($this->sectionAnswer(1)), new AiException('timeout', 'AI API timeout after 120 s'), new AiException('timeout', 'AI API timeout after 120 s')];
         try {
             $this->runJob($ctx, 'ai.form_generate', $this->brief($ctx, $projectId));
             self::fail('A timeout must be left to the queue retry');
@@ -223,14 +262,15 @@ final class AiStudioTest extends DatabaseTestCase
             self::assertSame('timeout', $e->reason);
         }
         $saved = json_decode((string) (new JobQueue($this->db()))->find($this->lastJobId)['progress'], true);
-        self::assertSame('form', $saved['step'], 'The plan was checkpointed before the failure');
+        self::assertSame('sections', $saved['step'], 'The plan and section 1 were checkpointed before the failure');
+        self::assertCount(1, $saved['done']);
 
         $this->transport->requests = [];
-        $this->transport->responses = [FakeTransport::ok($this->minimalForm())];
+        $this->transport->responses = [FakeTransport::ok($this->sectionAnswer(2))];
         $result = $this->runJob($ctx, 'ai.form_generate', $this->brief($ctx, $projectId), $saved, 120, true, $this->lastJobId);
 
         self::assertArrayHasKey('form_public_id', $result->data);
-        self::assertCount(1, $this->transport->requests, 'No second plan call on retry');
+        self::assertCount(1, $this->transport->requests, 'Only the missing section is written on retry');
     }
 
     public function testRefusedKeyOrUnknownModelStopsAtOnceWithACause(): void

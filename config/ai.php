@@ -14,6 +14,7 @@ return [
     // Minimum time a web request must have left to attempt a step itself; otherwise the CRON does it.
     'step_seconds' => [
         'form_plan' => 20,
+        'form_section' => 20,
         'form_generation' => 90,
         'form_revision' => 90,
         'form_repair' => 90,
@@ -36,6 +37,7 @@ return [
     // Max output tokens per operation (tight on purpose: cost control).
     'max_tokens' => [
         'form_plan' => 1500,
+        'form_section' => 3000,
         'form_generation' => 9000,
         'form_revision' => 9000,
     ],

@@ -56,6 +56,14 @@ final class JobApiController extends Controller
             'error' => is_array($result) ? ($result['error'] ?? null) : ($job['status'] === 'failed' ? 'failed' : null),
             'notice' => null,
         ];
+        $step = $data['step'];
+        if ($step === 'sections' && is_array($progress)) {
+            $data['step_text'] = t('ai.step.sections', ['current' => min(count((array) ($progress['done'] ?? [])) + 1, count((array) ($progress['sections'] ?? []))), 'total' => count((array) ($progress['sections'] ?? []))]);
+        } elseif (is_string($step) && in_array($step, ['plan', 'form', 'validate'], true)) {
+            $data['step_text'] = t('ai.step.' . $step);
+        } else {
+            $data['step_text'] = t('ai.step.pending');
+        }
         if (is_array($result) && isset($result['form_public_id'])) {
             $data['redirect'] = $this->app->url('forms/' . $result['form_public_id'] . '/edit');
         }
@@ -67,7 +75,10 @@ final class JobApiController extends Controller
             }
         } elseif (in_array($job['status'], ['pending', 'running'], true)) {
             $cronAge = Dispatcher::heartbeatAge($this->app);
-            if ($job['status'] === 'pending' && (int) $job['attempts'] > 0 && $lastError !== '') {
+            $runningFor = $job['reserved_at'] !== null ? time() - (int) strtotime($job['reserved_at'] . ' UTC') : 0;
+            if ($job['status'] === 'running' && $runningFor > 150) {
+                $data['notice'] = t('ai.job.long_running', ['seconds' => $runningFor]);
+            } elseif ($job['status'] === 'pending' && (int) $job['attempts'] > 0 && $lastError !== '') {
                 $data['notice'] = t('ai.job.retrying', ['attempt' => (int) $job['attempts'] + 1, 'max' => (int) $job['max_attempts'], 'error' => $lastError]);
             } elseif ($data['elapsed'] > 45 && ($cronAge === null || $cronAge > 180)) {
                 $data['notice'] = t('ai.job.no_cron');

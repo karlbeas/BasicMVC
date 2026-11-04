@@ -39,9 +39,14 @@ if (!function_exists('url')) {
 }
 
 if (!function_exists('asset')) {
+    /** Asset URL with a version stamp, so browsers reload CSS/JS after every update (they are cached 7 days). */
     function asset(string $path): string
     {
-        return App::instance()->url('assets/' . ltrim($path, '/'));
+        $path = ltrim($path, '/');
+        $file = App::instance()->root . '/public/assets/' . $path;
+        $version = is_file($file) ? (string) filemtime($file) : '';
+
+        return App::instance()->url('assets/' . $path) . ($version !== '' ? '?v=' . $version : '');
     }
 }
 

@@ -14,7 +14,7 @@ jQuery(function ($) {
                 $box.find('[data-back]').removeClass('d-none');
                 return;
             }
-            $box.find('[data-step]').text(steps[res.step] || steps.pending || '');
+            $box.find('[data-step]').text(res.step_text || steps[res.step] || steps.pending || '');
             $box.find('[data-notice]').toggleClass('d-none', !res.notice).text(res.notice || '');
             setTimeout(poll, tries < 20 ? 3000 : 6000);
         }).fail(function () { setTimeout(poll, 5000); });

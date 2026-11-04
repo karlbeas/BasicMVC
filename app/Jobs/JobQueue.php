@@ -123,11 +123,26 @@ final class JobQueue
     }
 
     /** Jobs left "running" by a process the host killed (max_execution_time) go back to the queue. */
+    public const INTERRUPTED = 'Process interrupted (time limit of the host?)';
+
+    /**
+     * A killed process counts as a failed attempt: retried while attempts remain,
+     * then marked failed — never an endless loop.
+     */
     public function releaseStale(int $olderThanSeconds): int
     {
-        return $this->db->execute(
-            "UPDATE jobs SET status = 'pending', reserved_at = NULL, reserved_by = NULL, updated_at = ? WHERE status = 'running' AND reserved_at < ?",
-            [gmdate('Y-m-d H:i:s'), gmdate('Y-m-d H:i:s', time() - $olderThanSeconds)],
+        $now = gmdate('Y-m-d H:i:s');
+        $before = gmdate('Y-m-d H:i:s', time() - $olderThanSeconds);
+        $failed = $this->db->execute(
+            "UPDATE jobs SET status = 'failed', error = ?, finished_at = ?, reserved_at = NULL, reserved_by = NULL, updated_at = ?
+             WHERE status = 'running' AND reserved_at < ? AND attempts >= max_attempts",
+            [self::INTERRUPTED, $now, $now, $before],
+        );
+
+        return $failed + $this->db->execute(
+            "UPDATE jobs SET status = 'pending', error = ?, reserved_at = NULL, reserved_by = NULL, updated_at = ?
+             WHERE status = 'running' AND reserved_at < ?",
+            [self::INTERRUPTED, $now, $before],
         );
     }
 }

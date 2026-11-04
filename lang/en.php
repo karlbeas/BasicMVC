@@ -385,7 +385,7 @@ return [
     'ai.job.title' => 'Generating',
     'ai.job.generating' => 'The AI is preparing your questionnaire…',
     'ai.job.revising' => 'The AI is editing your questionnaire…',
-    'ai.job.wait' => 'This usually takes 1 to 3 minutes. You can leave this page: the work continues.',
+    'ai.job.wait' => 'This usually takes 1 to 2 minutes. You can leave this page: the work continues.',
     'ai.step.pending' => 'Queued…',
     'ai.step.plan' => 'Step 1/3: section plan',
     'ai.step.form' => 'Step 2/3: writing the questions',
@@ -455,4 +455,6 @@ return [
     'ai.job.retrying' => 'Attempt :attempt of :max after an incident: :error',
     'ai.error.auth' => 'Mammouth API key refused: check MAMMOUTH_API_KEY in the .env file. No credit charged.',
     'ai.error.bad_request' => 'The AI service rejected the request (unknown model or invalid parameter): check the AI_MODEL_* models in the .env file. No credit charged.',
+    'ai.step.sections' => 'Step 2/3: writing the questions (section :current of :total)',
+    'ai.job.long_running' => 'The current step has been running for :seconds s: the host may have interrupted it. It will be restarted automatically (3 attempts at most).',
 ];

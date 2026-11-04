@@ -12,7 +12,9 @@ use App\Services\Ai\AiException;
 use App\Services\Ai\AiGateway;
 use App\Services\Ai\AiResponse;
 use App\Services\Ai\CreditLedger;
+use App\Services\Ai\FormAssembler;
 use App\Services\AuditLogger;
+use App\Services\Bridge\Naming;
 use App\Services\ContextFactory;
 use App\Services\FormInvalidException;
 use App\Services\FormSchema;
@@ -73,35 +75,66 @@ final class FormGenerationHandler implements JobHandler
         $canStart = static fn(string $op): bool => $ctx->canRunLong() || $ctx->secondsLeft() >= $ctx->app->config()->int('ai.step_seconds.' . $op, 90);
 
         try {
-            // Step 1 (generate only): plan of sections.
+            // Step 1 (generate only): plan of sections (short call).
             if ($progress['step'] === 'plan') {
                 if (!$canStart('form_plan')) {
                     return JobResult::yield($progress);
                 }
                 $plan = $call('form_plan', $prompt('form_plan'), $this->briefText($p, $languages), $maxTokens('form_plan', 1500))->json();
-                if ($plan === null) {
+                $sections = $this->planSections($plan);
+                if ($plan === null || $sections === []) {
                     return JobResult::done(['error' => 'invalid_output']);
                 }
-                $progress = ['step' => 'form', 'plan' => $plan];
-                $ctx->checkpoint($progress); // a later failure retries from the questionnaire, not from the plan
+                $progress = ['step' => 'sections', 'plan' => $plan, 'sections' => $sections, 'done' => [], 'misses' => 0];
+                $ctx->checkpoint($progress);
             }
 
-            // Step 2: questionnaire (or revision).
+            // Step 2 (generate): one short call per section, checkpointed — each fits the
+            // time limit of a web request, so generation progresses even without the CRON.
+            while ($progress['step'] === 'sections') {
+                $index = count($progress['done']);
+                if ($index >= count($progress['sections'])) {
+                    $form = FormAssembler::assemble($progress['done'], $this->settings($p, $progress['plan'], $languages), $languages);
+                    $progress = ['step' => 'validate', 'candidate' => (string) json_encode($form, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), 'repaired' => false, 'total' => count($progress['sections'])];
+                    $ctx->checkpoint($progress);
+                    break;
+                }
+                if (!$canStart('form_section')) {
+                    return JobResult::yield($progress);
+                }
+                $section = $progress['sections'][$index];
+                $user = $this->briefText($p, $languages)
+                    . "\nPlan complet :\n" . json_encode($progress['plan'], JSON_UNESCAPED_UNICODE)
+                    . "\n\nSection à rédiger maintenant (" . ($index + 1) . '/' . count($progress['sections']) . ") :\n" . json_encode($section, JSON_UNESCAPED_UNICODE)
+                    . "\n\nIdentifiants déjà utilisés (interdits) : " . implode(', ', $this->usedNames($progress['done']))
+                    . "\nListes de choix déjà définies (réutilisables) : " . json_encode($this->knownLists($progress['done']), JSON_UNESCAPED_UNICODE);
+                $answer = $call('form_section', $prompt('form_section'), $user, $maxTokens('form_section', 3000))->json();
+                $built = $answer === null ? null : FormAssembler::section($answer, (string) ($section['name'] ?? 'section_' . ($index + 1)), (string) ($section['title'] ?? 'Section ' . ($index + 1)), $languages[0]);
+                if ($built === null) {
+                    // One unusable answer is retried on the next pass; two in a row stop the job.
+                    if (++$progress['misses'] >= 2) {
+                        return JobResult::done(['error' => 'invalid_output']);
+                    }
+                    $ctx->checkpoint($progress);
+
+                    return JobResult::yield($progress);
+                }
+                $progress['done'][] = $built;
+                $progress['misses'] = 0;
+                $ctx->checkpoint($progress);
+            }
+
+            // Step 2 (revise): the whole questionnaire in one call (long: usually the CRON).
             if ($progress['step'] === 'form') {
                 if (!$canStart($operation)) {
                     return JobResult::yield($progress);
                 }
-                if ($mode === 'revise') {
-                    $current = $this->currentDraft($ctx, $orgId, (int) ($p['form_id'] ?? 0));
-                    if ($current === null) {
-                        return JobResult::done(['error' => 'not_draft']);
-                    }
-                    $user = "Consigne :\n" . mb_substr((string) ($p['instruction'] ?? ''), 0, 2000) . "\n\nQuestionnaire actuel :\n" . $current['schema_json'];
-                    $answer = $call('form_revision', $prompt('form_revision'), $user, $maxTokens('form_revision', 9000));
-                } else {
-                    $user = $this->briefText($p, $languages) . "\n\nPlan validé :\n" . json_encode($progress['plan'] ?? [], JSON_UNESCAPED_UNICODE);
-                    $answer = $call('form_generation', $prompt('form_generation'), $user, $maxTokens('form_generation', 9000));
+                $current = $this->currentDraft($ctx, $orgId, (int) ($p['form_id'] ?? 0));
+                if ($current === null) {
+                    return JobResult::done(['error' => 'not_draft']);
                 }
+                $user = "Consigne :\n" . mb_substr((string) ($p['instruction'] ?? ''), 0, 2000) . "\n\nQuestionnaire actuel :\n" . $current['schema_json'];
+                $answer = $call('form_revision', $prompt('form_revision'), $user, $maxTokens('form_revision', 9000));
                 $progress = ['step' => 'validate', 'candidate' => $answer->content, 'repaired' => false] + $progress;
                 $ctx->checkpoint($progress);
             }
@@ -111,6 +144,14 @@ final class FormGenerationHandler implements JobHandler
             $candidate = AiResponse::extractJson((string) ($progress['candidate'] ?? ''));
             $json = $candidate === null ? '' : (string) json_encode($this->normalize($candidate, $languages, $mode), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
             $result = $validator->validateJson($json === '' ? '{}' : $json);
+            if (!$result->isValid() && $candidate !== null) {
+                // Cheap deterministic fixes first: a long repair call is the last resort.
+                $fixed = (string) json_encode(FormAssembler::autofix(json_decode($json, true, 64, JSON_THROW_ON_ERROR)), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                $fixedResult = $validator->validateJson($fixed);
+                if ($fixedResult->isValid()) {
+                    [$json, $result] = [$fixed, $fixedResult];
+                }
+            }
             if (!$result->isValid()) {
                 if ($progress['repaired'] === true) {
                     return JobResult::done(['error' => 'invalid_output', 'details' => array_slice($result->errors(), 0, 5)]);
@@ -165,6 +206,101 @@ final class FormGenerationHandler implements JobHandler
         } catch (ImmutableVersionException) {
             return JobResult::done(['error' => 'not_draft']);
         }
+    }
+
+    /**
+     * Sections of the plan, each {name, title, purpose, questions}; at most 8.
+     *
+     * @param array<string, mixed>|null $plan
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function planSections(?array $plan): array
+    {
+        $out = [];
+        foreach (is_array($plan['sections'] ?? null) ? $plan['sections'] : [] as $i => $section) {
+            if (is_array($section)) {
+                $out[] = [
+                    'name' => Naming::slug((string) ($section['name'] ?? '')) ?: 'section_' . ($i + 1),
+                    'title' => mb_substr((string) ($section['title'] ?? 'Section ' . ($i + 1)), 0, 200),
+                    'purpose' => mb_substr((string) ($section['purpose'] ?? ''), 0, 500),
+                    'questions' => max(1, min(12, (int) ($section['questions'] ?? 4))),
+                ];
+            }
+        }
+
+        return array_slice($out, 0, 8);
+    }
+
+    /**
+     * @param array<string, mixed> $p
+     * @param array<string, mixed> $plan
+     * @param list<string> $languages
+     *
+     * @return array<string, mixed>
+     */
+    private function settings(array $p, array $plan, array $languages): array
+    {
+        $b = is_array($p['brief'] ?? null) ? $p['brief'] : [];
+        $title = trim((string) ($plan['title'] ?? '')) !== '' ? mb_substr(trim((string) $plan['title']), 0, 200) : mb_substr(trim((string) ($b['objective'] ?? 'Questionnaire')), 0, 120);
+        $settings = [
+            'form_id' => (new Naming())->unique($title, 'form'),
+            'title' => [$languages[0] => $title],
+            'estimated_minutes' => max(1, min(240, (int) ($b['minutes'] ?? 5))),
+            'sampling' => in_array($b['sampling'] ?? '', ['probabilistic', 'non_probabilistic', 'census'], true) ? $b['sampling'] : 'unknown',
+        ];
+        if (trim((string) ($b['objective'] ?? '')) !== '') {
+            $settings['objective'] = mb_substr(trim((string) $b['objective']), 0, 2000);
+        }
+        if (trim((string) ($b['audience'] ?? '')) !== '') {
+            $settings['target_population'] = mb_substr(trim((string) $b['audience']), 0, 1000);
+        }
+
+        return $settings;
+    }
+
+    /**
+     * @param list<array{group: array<string, mixed>, choice_lists: array<string, mixed>}> $done
+     *
+     * @return list<string>
+     */
+    private function usedNames(array $done): array
+    {
+        $names = [];
+        $walk = static function (array $node) use (&$walk, &$names): void {
+            if (is_string($node['name'] ?? null)) {
+                $names[] = $node['name'];
+            }
+            foreach (['items', 'rows'] as $key) {
+                foreach (is_array($node[$key] ?? null) ? $node[$key] : [] as $child) {
+                    if (is_array($child)) {
+                        $walk($child);
+                    }
+                }
+            }
+        };
+        foreach ($done as $section) {
+            $walk($section['group']);
+        }
+
+        return $names;
+    }
+
+    /**
+     * @param list<array{group: array<string, mixed>, choice_lists: array<string, mixed>}> $done
+     *
+     * @return array<string, list<string>> list name => codes (enough for the model to reuse it)
+     */
+    private function knownLists(array $done): array
+    {
+        $lists = [];
+        foreach ($done as $section) {
+            foreach ($section['choice_lists'] as $name => $choices) {
+                $lists[(string) $name] = array_values(array_map(static fn($c): string => is_array($c) ? (string) ($c['value'] ?? '') : '', is_array($choices) ? $choices : []));
+            }
+        }
+
+        return $lists;
     }
 
     /**
