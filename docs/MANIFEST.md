@@ -345,7 +345,7 @@ Avant acquisition, rémunération, fiscalité et support. Indicateurs à suivre 
 
 ## 10. Questions ouvertes (à trancher et consigner en ADR)
 
-1. Agrégateur de paiement : CinetPay, Notch Pay ou Flutterwave (frais, délais de reversement, pays couverts) ?
+1. ~~Agrégateur de paiement~~ — **tranché** : abstraction multi-agrégateurs, premier connecteur CinetPay ([ADR 0003](adr/0003-payment-gateway-abstraction.md)). Reste à ouvrir le compte marchand.
 2. ~~Hébergement~~ — **tranché** : hébergement mutualisé, tout en PHP (ADR 0002). Reste à choisir l'hébergeur et la région des données.
 3. Générateur PDF/DOCX : **côté PHP** (Dompdf ou mPDF + PhpWord) par l'ADR 0002 — le choix Dompdf / mPDF reste à faire (test sur rapport type).
 4. Nom de domaine et marque (vérifier la disponibilité de « F2S Pro »).
@@ -377,4 +377,4 @@ Avant acquisition, rémunération, fiscalité et support. Indicateurs à suivre 
 
 ### Prochaine tâche à donner à Claude Code
 
-> « Lis CLAUDE.md, docs/MANIFEST.md et les ADR. Termine la phase 1 : paiement des offres Pass Projet et Pro via l'agrégateur retenu (ADR à écrire), tables `subscriptions` et `payments` (montants en centimes + devise, affichage USD/FCFA), page de choix d'offre, redirection vers le paiement, **activation uniquement après vérification serveur du webhook** (signature + requête de confirmation), expiration du Pass après 30 jours et retour en gratuit. Tests avec webhooks simulés. Livre le zip public_html. »
+> « Lis CLAUDE.md, docs/MANIFEST.md et les ADR. Termine la phase 1 : paiement des offres Pass Projet et Pro via l'interface `PaymentGateway` et le connecteur CinetPay (ADR 0003), tables `subscriptions` et `payments` (montants en centimes + devise, affichage USD/FCFA), page de choix d'offre, redirection vers le paiement, **activation uniquement après vérification serveur du webhook** (signature + requête de confirmation), expiration du Pass après 30 jours et retour en gratuit. Tests avec webhooks simulés. Livre le zip public_html. »
