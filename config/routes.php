@@ -3,11 +3,14 @@
 declare(strict_types=1);
 
 use App\Controllers\Api\FormApiController;
+use App\Controllers\Api\JobApiController;
+use App\Controllers\Bridge\ImportController;
 use App\Controllers\Collect\CampaignController;
 use App\Controllers\Collect\PublicFormController;
 use App\Controllers\Control\AuthController;
 use App\Controllers\Control\ProjectController;
 use App\Controllers\HomeController;
+use App\Controllers\Studio\AiController;
 use App\Controllers\Studio\FormController;
 use App\Controllers\System\InstallController;
 use App\Controllers\System\SystemController;
@@ -35,6 +38,19 @@ return static function (Router $r): void {
     $r->post('/projects/{project}/forms/blank', [FormController::class, 'storeBlank'], ['auth']);
     $r->get('/forms/{form}/edit', [FormController::class, 'edit'], ['auth']);
     $r->get('/forms/{form}', [FormController::class, 'show'], ['auth']);
+
+    // Studio — AI
+    $r->get('/projects/{project}/ai', [AiController::class, 'create'], ['auth']);
+    $r->post('/projects/{project}/ai', [AiController::class, 'store'], ['auth']);
+    $r->post('/forms/{form}/ai-revise', [AiController::class, 'revise'], ['auth']);
+    $r->get('/ai/jobs/{job}', [AiController::class, 'job'], ['auth']);
+
+    // Bridge — imports
+    $r->get('/projects/{project}/import', [ImportController::class, 'create'], ['auth']);
+    $r->post('/projects/{project}/import', [ImportController::class, 'store'], ['auth']);
+    $r->get('/imports/{import}', [ImportController::class, 'show'], ['auth']);
+    $r->post('/imports/{import}/confirm', [ImportController::class, 'confirm'], ['auth']);
+    $r->post('/imports/{import}/cancel', [ImportController::class, 'cancel'], ['auth']);
     $r->post('/forms/{form}/drafts', [FormController::class, 'newDraft'], ['auth']);
     $r->post('/forms/{form}/versions/{version}', [FormController::class, 'updateDraft'], ['auth']);
     $r->post('/forms/{form}/versions/{version}/publish', [FormController::class, 'publish'], ['auth']);
@@ -55,6 +71,7 @@ return static function (Router $r): void {
 
     // API (session auth + X-CSRF-Token header)
     $r->post('/api/forms/validate', [FormApiController::class, 'validate'], ['auth']);
+    $r->get('/api/jobs/{job}', [JobApiController::class, 'show'], ['auth']);
 
     // System
     $r->get('/install', [InstallController::class, 'show']);

@@ -25,6 +25,7 @@ final class HomeController extends Controller
             'projects' => array_slice($projects, 0, 5),
             'projectCount' => count($projects),
             'plan' => PlanPolicy::forOrganization($this->app->db(), $ctx->organizationId()),
+            'aiCredits' => (new \App\Services\Ai\CreditLedger($this->app->db()))->summary($ctx->organizationId()),
         ]);
     }
 

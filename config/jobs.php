@@ -15,5 +15,7 @@ return [
     'http_token' => Env::get('CRON_HTTP_TOKEN', ''),
     'handlers' => [
         'system.ping' => App\Jobs\Handlers\PingHandler::class,
+        'ai.form_generate' => App\Jobs\Handlers\FormGenerationHandler::class,
+        'ai.form_revise' => App\Jobs\Handlers\FormGenerationHandler::class,
     ],
 ];

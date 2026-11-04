@@ -18,8 +18,8 @@ F2S Pro est une plateforme d'enquêtes intelligentes (type KoboToolbox / Google 
 - **Base** : MySQL 8+ **ou MariaDB 10.6+** (InnoDB, utf8mb4, `utf8mb4_unicode_ci`, colonnes JSON pour le schéma de formulaire et les réponses brutes). Pas de triggers, procédures stockées ni `utf8mb4_0900_*`.
 - **Front** : HTML5, Bootstrap 5.3 + jQuery 3.7 **servis localement** (`public/assets/vendor`, pas de CDN, CSP `'self'`, pas de script inline). Pas de framework SPA. PWA hors ligne en phase 6.
 - **Tâches longues** : file SQL `jobs` traitée par `bin/worker-dispatch.php` (CRON chaque minute) ou `/cron/{CRON_HTTP_TOKEN}`. Handlers **reprenables** (`JobResult::yield`), jamais d'appel IA ou de calcul lourd en synchrone dans une requête web.
-- **Statistiques et conversions** : en PHP (SQL + PHP ; PhpSpreadsheet pour XLSForm). **Python uniquement en dev/CI** comme oracle des jeux étalons (`worker/`).
-- **IA** : API Mammouth (compatible OpenAI), `https://api.mammouth.ai/v1`, appelée uniquement côté serveur via `app/Services/AiGateway.php` (phase 2), depuis une tâche de la file.
+- **Statistiques et conversions** : en PHP (SQL + PHP). Lecture Excel/XLSForm par `app/Services/Bridge/XlsxReader.php` (ZipArchive + XMLReader, **pas de PhpSpreadsheet** — ADR 0004). **Python uniquement en dev/CI** comme oracle des jeux étalons (`worker/`, `tests/fixtures/imports/build_fixtures.py`).
+- **IA** : API Mammouth (compatible OpenAI), `https://api.mammouth.ai/v1`, appelée uniquement côté serveur via `app/Services/Ai/AiGateway.php`, depuis une tâche de la file (`FormGenerationHandler`) ; prompts versionnés dans `app/Prompts/` ; chaque appel journalisé dans `token_usage` ; crédits dans `credit_ledger` (`CreditLedger`), débités seulement après succès.
 - **Paiement** : agrégateur Mobile Money + carte (CinetPay / Notch Pay / Flutterwave — à choisir), validation par webhook côté serveur.
 
 ## Règles non négociables
@@ -51,6 +51,7 @@ bash bin/build-release.sh [version]          # archive de déploiement (vendor/ 
 
 - `app/Core/` : noyau (App, Router, Request/Response, View, Database, Session, Csrf, Lang, Env, Migrator, Logger).
 - `app/Controllers/{Control,Studio,Collect,Api,System}/`, `app/Models/` (repositories), `app/Services/` (AuthService, PlanPolicy, FormValidator, FormSemanticChecker, FormService, AuditLogger…), `app/Services/Collect/` (ExpressionEvaluator — jumeau JS `public/assets/js/f2s-expr.js` testé sur `tests/fixtures/expressions.json` —, SubmissionValidator, FormRenderer, CampaignService, SubmissionService, ResponseExporter), `app/Jobs/` (JobQueue, Dispatcher, handlers), `app/Views/`.
+- Bridge (imports) : `app/Services/Bridge/` (XlsxReader, CsvReader, XlsFormConverter, QuestionListConverter, ConversionReport, ImportService) ; jeux étalons `tests/fixtures/imports/`.
 - Éditeur visuel : `public/assets/js/f2s-editor.js` ; formulaire public : `/f/{token}` (`PublicFormController`, `public/assets/js/f2s-collect.js`).
 - Migrations : appliquées automatiquement par `bin/worker-dispatch.php` après une mise à jour (`SchemaUpgrader`) ; page 503 tant qu'elles sont en attente.
 - Routes : `config/routes.php` (table explicite ; middleware `auth`, `guest`, `nocsrf`).

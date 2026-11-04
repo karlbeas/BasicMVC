@@ -85,6 +85,14 @@ final class Session
         }
     }
 
+    /** Releases the session lock (before a long operation in the same request). */
+    public function close(): void
+    {
+        if ($this->native && session_status() === PHP_SESSION_ACTIVE) {
+            session_write_close();
+        }
+    }
+
     public function destroy(): void
     {
         $this->start();

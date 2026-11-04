@@ -16,7 +16,7 @@ use App\Core\Migrator;
 final class Installer
 {
     public const MIN_PHP = '8.3.0';
-    public const EXTENSIONS = ['pdo_mysql', 'mbstring', 'json', 'fileinfo', 'openssl'];
+    public const EXTENSIONS = ['pdo_mysql', 'mbstring', 'json', 'fileinfo', 'openssl', 'curl', 'zip', 'xmlreader'];
 
     public function __construct(private string $root, private string $storagePath) {}
 

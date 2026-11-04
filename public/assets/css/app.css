@@ -24,3 +24,4 @@ details > summary { cursor: pointer; }
 .f2s-item.f2s-group-item { border-left-color: #6c757d; }
 .f2s-item .f2s-handle { cursor: default; }
 .f2s-children { border-left: 2px dashed #ced4da; padding-left: .75rem; margin-left: .25rem; }
+.f2s-scroll { max-height: 28rem; overflow-y: auto; }

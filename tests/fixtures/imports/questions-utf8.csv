@@ -1,0 +1,5 @@
+﻿question;type;choix;obligatoire
+Votre ville;texte;;oui
+Votre âge;entier;;oui
+Satisfaction globale;échelle;;
+Moyen de paiement;choix unique;Espèces;Mobile Money;Carte

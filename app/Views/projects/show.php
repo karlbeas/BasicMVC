@@ -20,7 +20,8 @@ $title = (string) $project['name'];
                 <input class="form-control" name="title" maxlength="200" required placeholder="<?= e(t('forms.blank_placeholder')) ?>" aria-label="<?= e(t('forms.blank_placeholder')) ?>">
                 <button class="btn btn-f2s text-nowrap"><?= e(t('forms.blank_create')) ?></button>
             </form>
-            <a class="btn btn-outline-secondary text-nowrap" href="<?= e(url('projects/' . $project['public_id'] . '/forms/new')) ?>"><?= e(t('forms.import_json')) ?></a>
+            <a class="btn btn-primary text-nowrap" href="<?= e(url('projects/' . $project['public_id'] . '/ai')) ?>"><?= e(t('ai.button')) ?></a>
+            <a class="btn btn-outline-secondary text-nowrap" href="<?= e(url('projects/' . $project['public_id'] . '/import')) ?>"><?= e(t('bridge.button')) ?></a>
         </div>
     <?php endif; ?>
 </div>

@@ -1,0 +1,3 @@
+question,type,choix
+Région,choix unique,Littoral|Centre|Ouest
+Remarques générales,texte long,

@@ -3,6 +3,7 @@
 /** @var list<array<string, mixed>> $projects */
 /** @var int $projectCount */
 /** @var App\Services\PlanPolicy $plan */
+/** @var array{available: int} $aiCredits */
 $title = t('nav.dashboard');
 ?>
 <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
@@ -40,6 +41,9 @@ $title = t('nav.dashboard');
                         </li>
                     <?php endif; ?>
                 <?php endforeach; ?>
+                <li class="list-group-item d-flex justify-content-between">
+                    <span><?= e(t('limit.ai_credits_left')) ?></span><strong><?= e($aiCredits['available']) ?></strong>
+                </li>
             </ul>
         </div>
     </div>

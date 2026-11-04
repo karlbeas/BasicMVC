@@ -36,6 +36,15 @@ L'assistant `/install` fonctionne de la même façon dans ces deux cas.
 
 Copier `.env.example` en `.env` et renseigner `APP_URL`, `DB_*`, `APP_ENV=production`, `APP_DEBUG=false`, `CRON_HTTP_TOKEN`. Droits : `.env` en `600` ; `storage/` en écriture pour PHP.
 
+### Activer l'IA (création et retouche de questionnaires)
+
+1. Créez une clé API sur Mammouth (https://mammouth.ai).
+2. Gestionnaire de fichiers → `public_html/.env` (fichier caché : activez « Afficher les fichiers cachés ») → renseignez `MAMMOUTH_API_KEY=votre_clé`.
+3. Optionnel : `AI_DAILY_BUDGET_USD_PER_ORG` (plafond quotidien par organisation, 0,50 $ par défaut) et les noms de modèles `AI_MODEL_*`.
+4. La tâche CRON doit être active : la génération s'exécute en tâche de fond (la page de suivi la lance aussi directement).
+
+Les appels sortants HTTPS (cURL) doivent être autorisés par l'hébergeur vers `api.mammouth.ai`.
+
 ## 5. Base de données (mises à jour)
 
 L'assistant applique les migrations à l'installation. Pour une **mise à jour** :

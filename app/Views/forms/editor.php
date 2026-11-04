@@ -39,6 +39,19 @@ foreach (['unknown', 'probabilistic', 'non_probabilistic', 'census'] as $s) {
 <p class="text-muted small"><?= e(t('editor.help')) ?></p>
 <div id="validation-result" aria-live="polite"></div>
 
+<details class="card shadow-sm mb-3">
+    <summary class="card-header"><?= e(t('ai.revise.title')) ?></summary>
+    <form method="post" action="<?= e(url('forms/' . $form['public_id'] . '/ai-revise')) ?>" class="card-body">
+        <?= csrf_field() ?>
+        <label class="form-label small" for="instruction"><?= e(t('ai.revise.label')) ?></label>
+        <textarea class="form-control mb-2" id="instruction" name="instruction" rows="2" maxlength="2000" placeholder="<?= e(t('ai.revise.placeholder')) ?>" required></textarea>
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <span class="small text-muted"><?= e(t('ai.revise.help')) ?></span>
+            <button class="btn btn-outline-primary btn-sm"><?= e(t('ai.revise.submit')) ?></button>
+        </div>
+    </form>
+</details>
+
 <div id="f2s-editor" data-strings="<?= e((string) json_encode($strings, JSON_UNESCAPED_UNICODE)) ?>">
     <noscript><div class="alert alert-warning"><?= e(t('editor.noscript')) ?></div></noscript>
 </div>
