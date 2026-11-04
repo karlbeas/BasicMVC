@@ -38,12 +38,17 @@ final class Dispatcher
             $this->queue->releaseStale($this->staleAfter());
             $deadline = microtime(true) + $budgetSeconds;
             $workerId = gethostname() . ':' . getmypid();
+            $yielded = [];
             while (microtime(true) < $deadline - 2) {
-                $job = $this->queue->reserve($workerId);
+                // A job that yielded is not taken again in the same run (no busy loop).
+                $job = $this->queue->reserve($workerId, 'php', null, $yielded);
                 if ($job === null) {
                     break;
                 }
                 $outcome = $this->execute($job, $deadline);
+                if ($outcome === 'yielded') {
+                    $yielded[] = (int) $job['id'];
+                }
                 ++$stats['processed'];
                 ++$stats[$outcome];
             }

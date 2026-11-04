@@ -17,7 +17,9 @@ $budget = $app->config()->int('jobs.time_budget_seconds', 50);
 if (isset($argv[1]) && ctype_digit($argv[1])) {
     $budget = (int) $argv[1];
 }
-@set_time_limit($budget + 15);
+// No PHP time limit in the CRON: a long AI step may outlast the budget, which only
+// stops the dispatcher from starting new jobs (see JobContext::canRunLong()).
+@set_time_limit(0);
 
 // After an update (zip extracted over the install), apply new migrations first.
 $migrated = $app->schemaUpgrader()->upgrade();

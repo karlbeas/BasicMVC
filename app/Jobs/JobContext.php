@@ -44,7 +44,9 @@ final class JobContext
      */
     public function canRunLong(): bool
     {
-        return $this->longRun ?? (PHP_SAPI === 'cli' && (int) ini_get('max_execution_time') === 0);
+        // CLI = CRON dispatcher (no time limit by default; never rely on max_execution_time
+        // here, the script itself may have called set_time_limit()).
+        return $this->longRun ?? (PHP_SAPI === 'cli');
     }
 
     /**

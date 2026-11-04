@@ -37,13 +37,17 @@ final class JobQueue
     /**
      * Atomically takes the next available job (SKIP LOCKED: MySQL 8+, MariaDB 10.6+).
      *
+     * @param list<int> $excludeIds jobs already handled in this dispatcher run (no busy loop)
+     *
      * @return array<string, mixed>|null
      */
-    public function reserve(string $workerId, string $runner = 'php', ?int $jobId = null): ?array
+    public function reserve(string $workerId, string $runner = 'php', ?int $jobId = null, array $excludeIds = []): ?array
     {
-        return $this->db->transaction(function (Database $db) use ($workerId, $runner, $jobId): ?array {
+        return $this->db->transaction(function (Database $db) use ($workerId, $runner, $jobId, $excludeIds): ?array {
+            $excludeIds = array_map('intval', $excludeIds);
             $sql = "SELECT * FROM jobs WHERE status = 'pending' AND runner = ? AND available_at <= ?"
                 . ($jobId !== null ? ' AND id = ?' : '')
+                . ($excludeIds !== [] ? ' AND id NOT IN (' . implode(',', $excludeIds) . ')' : '')
                 . ' ORDER BY priority DESC, id ASC LIMIT 1 FOR UPDATE SKIP LOCKED';
             $params = [$runner, gmdate('Y-m-d H:i:s')];
             if ($jobId !== null) {

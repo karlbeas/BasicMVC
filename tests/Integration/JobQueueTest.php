@@ -98,6 +98,17 @@ final class JobQueueTest extends DatabaseTestCase
         self::assertSame('done', (new Dispatcher($this->app))->runOne($id, 5), 'Released after 180 s (AI timeout + 60) despite JOBS_STALE_AFTER=600, then run');
     }
 
+    public function testAYieldingJobIsNotTakenAgainInTheSameRun(): void
+    {
+        $queue = new JobQueue($this->db());
+        $queue->push('system.ping', ['steps' => 1_000_000_000]); // cannot finish within the budget
+
+        $stats = (new Dispatcher($this->app))->run(3);
+
+        self::assertSame(1, $stats['yielded'], 'Exactly one execution, not a busy loop');
+        self::assertSame(1, $stats['processed']);
+    }
+
     public function testCronHeartbeat(): void
     {
         (new Dispatcher($this->app))->run(3);
