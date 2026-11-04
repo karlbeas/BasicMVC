@@ -273,14 +273,16 @@ Règles d'économie : noms de modèles en configuration (jamais en dur), prompts
 
 | Phase | Période | Livrables | Critère de sortie |
 | --- | --- | --- | --- |
-| **1 — Socle** | J1–J7 | Squelette MVC, auth, organisations/workspaces/rôles, projets, migrations, **F2S Schema v1 + validateur**, imports XLSX/CSV simples | Tests verts ; un formulaire JSON valide peut être créé, validé, stocké |
-| **2 — AI Studio + Collect** | J8–J15 | Génération IA, éditeur visuel, Dashboard Before Data, publication web (lien/QR), règles courantes, soumissions | Un utilisateur crée un formulaire par prompt et reçoit des réponses |
-| **3 — Analytics** | J16–J24 | Niveaux 1–3, filtres, tableaux croisés, alertes qualité, AI Insights, rapport PDF | Tableau de bord automatique juste sur les jeux étalons |
-| **4 — Monétisation + pilote** | J25–J35 | Paiement Mobile Money, plans, quotas, crédits, administration, import/export XLSForm, tests, **pilote Cameroun** | MVP en ligne, premiers paiements |
-| **5 — Bridge étendu** | J36–J60 | Connecteurs Kobo/Google, XForm XML, équipes, synchronisation, Ask My Survey | Import Kobo → rapport en moins de 5 min |
+| **1 — Socle + paiement** | J1–J10 | Squelette MVC, auth, organisations/workspaces/rôles, projets, migrations, **F2S Schema v1 + validateur** (fait, v0.1–0.2) ; **paiement Mobile Money + carte, souscription aux offres payantes, activation par webhook** | Tests verts ; un formulaire JSON valide peut être créé, validé, stocké ; une organisation passe en Pass Projet / Pro après paiement vérifié |
+| **2 — AI Studio + Collect + Bridge** | J11–J22 | Génération IA, éditeur visuel, Dashboard Before Data, publication web (lien/QR), règles courantes, soumissions ; **imports Excel/CSV/XLSForm, Kobo, ODK** avec compte rendu de conversion | Un utilisateur crée un formulaire par prompt ou par import et reçoit des réponses |
+| **3 — Analytics + équipes** | J23–J33 | Niveaux 1–3, filtres, tableaux croisés, alertes qualité, AI Insights, rapport PDF/Word ; **invitations de collaborateurs, mot de passe oublié, changement d'organisation** | Tableau de bord automatique juste sur les jeux étalons |
+| **4 — Crédits + pilote** | J34–J40 | Crédits IA, administration, export XLSForm, tests, **pilote Cameroun** | MVP en ligne, premiers paiements |
+| **5 — Bridge étendu** | J41–J60 | Connecteur Google Forms, XForm XML avancé, synchronisation, Ask My Survey | Import Kobo → rapport en moins de 5 min |
 | **6 — Terrain + stats** | J61–J90 | PWA hors ligne robuste, supervision terrain, statistiques avancées (niveaux 4–5), SPSS/Stata, tests de charge | Hors ligne validé sur appareils réels |
 
 Priorité commerciale : le **pont Kobo/Excel → tableau de bord → rapport IA** est la fonction la plus rapide à vendre.
+
+> Feuille de route réordonnée le 2026-11-04 à la demande du porteur de projet : paiement en fin de phase 1, imports en phase 2, équipes (invitations, mot de passe oublié, multi-organisations) en phase 3.
 
 ### Budget
 
@@ -371,8 +373,8 @@ Avant acquisition, rémunération, fiscalité et support. Indicateurs à suivre 
 | --- | --- | --- | --- |
 | 2026-11-04 | Cadrage | Études produit, arbitrages, manifeste, brouillon F2S Schema v1 + exemple | Phase 1 : initialiser le dépôt PHP, migrations de base, validateur de schéma + tests |
 | 2026-11-04 | 1 — Socle (**v0.1.0**, `f2s-pro-0.1.0.zip`) | Projet renommé **F2S Pro** ; ADR 0002 (mutualisé) ; noyau MVC (routeur explicite, PDO, CSRF, sessions dans `storage/`, FR/EN, en-têtes de sécurité/CSP) ; migrations (plans + quotas, organisations, workspaces, utilisateurs, rôles, projets, formulaires, versions immuables, questions, file `jobs`, audit) ; inscription/connexion (limitation des tentatives) ; projets ; création d'un formulaire depuis un JSON validé (`FormValidator` = opis/json-schema + contrôles sémantiques), publication figée, nouvelle version, export JSON ; quota « questions par formulaire » ; file de tâches reprenable + CRON + déclencheur HTTP ; guide de déploiement mutualisé, archive de release, CI (MySQL 8 + MariaDB 10.6). 65 tests verts, PHPStan niveau 6. | Fin de phase 1 : import XLSX/CSV simples (PhpSpreadsheet) avec compte rendu de conversion ; changement d'organisation active et invitations ; réinitialisation de mot de passe et vérification d'e-mail |
-| 2026-11-04 | 1 — Socle (**v0.2.0**, `f2s-pro-0.2.0-public_html.zip`) | Installation « prête à l'emploi » dans `public_html` : zip à extraire tel quel, assistant web `/install` (vérifications, code d'installation à usage unique, test de la base, migrations, écriture de `.env`, jeton CRON, auto-désactivation), `.htaccess` de refus dans chaque dossier interne. Testé sous Apache. 71 tests. | Idem v0.1.0 (import XLSX/CSV, invitations, mot de passe oublié) |
+| 2026-11-04 | 1 — Socle (**v0.2.0**, `f2s-pro-0.2.0-public_html.zip`) | Installation « prête à l'emploi » dans `public_html` : zip à extraire tel quel, assistant web `/install` (vérifications, code d'installation à usage unique, test de la base, migrations, écriture de `.env`, jeton CRON, auto-désactivation), `.htaccess` de refus dans chaque dossier interne. Testé sous Apache. 71 tests. | Fin de phase 1 : paiement Mobile Money + carte et souscription aux offres (feuille de route réordonnée) |
 
 ### Prochaine tâche à donner à Claude Code
 
-> « Lis CLAUDE.md, docs/MANIFEST.md et les ADR. Termine la phase 1 : ajoute `phpoffice/phpspreadsheet` et implémente dans `app/Services/Bridge/` la détection de format puis l'import d'un XLSX/CSV simple de **questions** vers F2S Schema v1, avec compte rendu de conversion (repris / transformé / perdu / non supporté) affiché avant confirmation, en tâche `jobs` reprenable si le fichier est gros. Ajoute les jeux étalons dans `tests/fixtures/imports/`. Mets à jour l'état d'avancement. »
+> « Lis CLAUDE.md, docs/MANIFEST.md et les ADR. Termine la phase 1 : paiement des offres Pass Projet et Pro via l'agrégateur retenu (ADR à écrire), tables `subscriptions` et `payments` (montants en centimes + devise, affichage USD/FCFA), page de choix d'offre, redirection vers le paiement, **activation uniquement après vérification serveur du webhook** (signature + requête de confirmation), expiration du Pass après 30 jours et retour en gratuit. Tests avec webhooks simulés. Livre le zip public_html. »
