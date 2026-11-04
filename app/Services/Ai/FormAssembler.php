@@ -24,21 +24,27 @@ final class FormAssembler
     public static function section(array $answer, string $fallbackName, string $fallbackLabel, string $lang): ?array
     {
         $group = is_array($answer['group'] ?? null) ? $answer['group'] : (($answer['kind'] ?? null) === 'group' ? $answer : null);
-        if ($group === null && is_array($answer['items'] ?? null)) {
-            $group = ['items' => $answer['items']];
+        if ($group === null && is_array($answer['items'] ?? ($answer['questions'] ?? null))) {
+            $group = ['items' => $answer['items'] ?? $answer['questions']];
+        }
+        if ($group !== null && !isset($group['items']) && is_array($group['questions'] ?? null)) {
+            $group['items'] = $group['questions'];
+            unset($group['questions']);
         }
         if ($group === null || !is_array($group['items'] ?? null) || $group['items'] === []) {
             return null;
         }
         $group['kind'] = 'group';
-        $group['name'] = is_string($group['name'] ?? null) && Naming::isValidName($group['name']) ? $group['name'] : (Naming::slug($fallbackName) ?: 'section');
-        if (!is_array($group['label'] ?? null) || $group['label'] === []) {
-            $group['label'] = [$lang => $fallbackLabel];
+        if (!is_string($group['name'] ?? null) || !Naming::isValidName($group['name'])) {
+            $group['name'] = Naming::slug($fallbackName) ?: 'section';
         }
-        $group['page'] = true;
+        if (!isset($group['label']) || $group['label'] === [] || $group['label'] === '') {
+            $group['label'] = is_string($group['title'] ?? null) && trim($group['title']) !== '' ? $group['title'] : [$lang => $fallbackLabel];
+        }
         $lists = is_array($answer['choice_lists'] ?? null) ? $answer['choice_lists'] : [];
 
-        return ['group' => $group, 'choice_lists' => $lists];
+        // Fast models take liberties with the format: normalize deterministically.
+        return (new FormNormalizer($lang, $lists))->part($group);
     }
 
     /**
@@ -50,22 +56,23 @@ final class FormAssembler
      *
      * @return array{group: array<string, mixed>, choice_lists: array<string, mixed>}|null
      */
-    public static function item(array $answer, array $original): ?array
+    public static function item(array $answer, array $original, string $lang = 'fr'): ?array
     {
         if (($answer['unchanged'] ?? false) === true) {
             return $original;
         }
-        $item = is_array($answer['item'] ?? null) ? $answer['item'] : (is_array($answer['group'] ?? null) ? $answer['group'] : (in_array($answer['kind'] ?? null, ['question', 'group'], true) ? $answer : null));
-        if ($item === null || !in_array($item['kind'] ?? null, ['question', 'group'], true) || !is_string($item['name'] ?? null)) {
+        $item = is_array($answer['item'] ?? null) ? $answer['item'] : (is_array($answer['group'] ?? null) ? $answer['group'] : (isset($answer['kind']) || isset($answer['type']) ? $answer : null));
+        if ($item === null) {
             return null;
         }
-        if ($item['kind'] === 'group' && (!is_array($item['items'] ?? null) || $item['items'] === [])) {
+        $isGroup = ($item['kind'] ?? null) === 'group' || (!isset($item['type']) && (is_array($item['items'] ?? null) || is_array($item['questions'] ?? null)));
+        if ($isGroup && (!is_array($item['items'] ?? ($item['questions'] ?? null)) || ($item['items'] ?? $item['questions']) === [])) {
             return null;
         }
-        $lists = is_array($answer['choice_lists'] ?? null) ? $answer['choice_lists'] : [];
-
         // Lists the part still uses but the answer did not repeat: keep the original ones.
-        return ['group' => $item, 'choice_lists' => $lists + $original['choice_lists']];
+        $lists = (is_array($answer['choice_lists'] ?? null) ? $answer['choice_lists'] : []) + $original['choice_lists'];
+
+        return (new FormNormalizer($lang, $lists))->part($item);
     }
 
     /**

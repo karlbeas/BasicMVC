@@ -182,7 +182,7 @@ final class AiStudioTest extends DatabaseTestCase
     {
         [$ctx, $projectId] = $this->accountWithProject();
         $broken = json_decode($this->sectionAnswer(1), true);
-        $broken['group']['items'][0]['type'] = 'slider'; // structural error: no deterministic fix
+        $broken['group']['items'][0]['relevant'] = "(\${consent} = 'yes'"; // unbalanced: no deterministic fix
         $good = json_decode($this->sectionAnswer(1), true);
         $this->transport->responses = [
             FakeTransport::ok('{"sections": [{"name": "a", "title": "A"}]}'),
@@ -196,7 +196,7 @@ final class AiStudioTest extends DatabaseTestCase
         self::assertCount(3, $this->transport->requests);
         $repair = (string) $this->transport->requests[2]['body']['messages'][1]['content'];
         self::assertStringContainsString('Erreurs', $repair);
-        self::assertStringContainsString('slider', $repair, 'only the faulty part is sent for repair');
+        self::assertStringContainsString('unbalanced', $repair, 'only the faulty part, with its errors, is sent for repair');
         self::assertSame(3000, $this->transport->requests[2]['body']['max_tokens'], 'the repair is a short call too');
     }
 

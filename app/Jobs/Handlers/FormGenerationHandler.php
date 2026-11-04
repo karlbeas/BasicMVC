@@ -146,7 +146,13 @@ final class FormGenerationHandler implements JobHandler
             while (!$result->isValid()) {
                 $faulty = $this->faultyParts($result->errors(), count($progress['done']));
                 if ($progress['repaired'] === true || $faulty === []) {
-                    return JobResult::done(['error' => 'invalid_output', 'details' => array_slice($result->errors(), 0, 5)]);
+                    $first = $result->errors()[0] ?? null;
+
+                    return JobResult::done([
+                        'error' => 'invalid_output',
+                        'detail' => $first !== null ? $first['path'] . ' : ' . mb_substr($first['message'], 0, 160) : '',
+                        'details' => array_slice($result->errors(), 0, 10),
+                    ]);
                 }
                 $progress['repair_todo'] ??= $faulty;
                 while ($progress['repair_todo'] !== []) {
@@ -159,7 +165,7 @@ final class FormGenerationHandler implements JobHandler
                         . implode("\n", array_map(static fn(array $e): string => $e['path'] . ' : ' . $e['message'], array_slice($errors, 0, 10)))
                         . "\n\nListes de choix disponibles : " . json_encode($progress['done'][$i]['choice_lists'], JSON_UNESCAPED_UNICODE)
                         . "\n\nPartie :\n" . json_encode($progress['done'][$i]['group'], JSON_UNESCAPED_UNICODE), 'form_item')->json();
-                    $fixed = $answer === null ? null : FormAssembler::item($answer, $progress['done'][$i]);
+                    $fixed = $answer === null ? null : FormAssembler::item($answer, $progress['done'][$i], $progress['languages'][0]);
                     if ($fixed !== null) {
                         $progress['done'][$i] = $fixed;
                     }
@@ -258,7 +264,7 @@ final class FormGenerationHandler implements JobHandler
             . "\n\nPartie " . ($index + 1) . '/' . count($progress['todo']) . " :\n" . json_encode($part['group'], JSON_UNESCAPED_UNICODE);
         $answer = $this->call('form_revision', 'form_item_revise', $user, 'form_item')->json();
 
-        return $answer === null ? null : FormAssembler::item($answer, $part);
+        return $answer === null ? null : FormAssembler::item($answer, $part, $progress['languages'][0]);
     }
 
     /**
