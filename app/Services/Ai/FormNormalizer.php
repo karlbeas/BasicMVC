@@ -49,6 +49,8 @@ final class FormNormalizer
     private array $lists;
     /** @var array<string, array<string, string>> list name => old code => new code */
     private array $recoded = [];
+    /** @var array<string, string> original question name => normalized name */
+    private array $renamed = [];
 
     /** @param array<string, mixed> $lists existing choice lists of the part */
     public function __construct(private string $lang, array $lists = [])
@@ -67,7 +69,7 @@ final class FormNormalizer
     public function part(array $part): array
     {
         $node = $this->node($part);
-        if ($this->recoded !== []) {
+        if ($this->recoded !== [] || $this->renamed !== []) {
             $node = $this->recodeExpressions($node);
         }
 
@@ -131,7 +133,11 @@ final class FormNormalizer
         $type = in_array($rawType, self::TYPES, true) ? $rawType : (self::TYPE_SYNONYMS[$rawType] ?? 'text');
         $label = $this->text($q['label'] ?? ($q['question'] ?? ($q['text'] ?? ($q['title'] ?? null))));
         $out['type'] = $type;
-        $out['name'] = $this->name($q['name'] ?? ($q['id'] ?? (is_array($label) ? (string) reset($label) : 'question')), 'q');
+        $rawName = $q['name'] ?? ($q['id'] ?? null);
+        $out['name'] = $this->name($rawName ?? (is_array($label) ? (string) reset($label) : 'question'), 'q');
+        if (is_scalar($rawName) && (string) $rawName !== $out['name']) {
+            $this->renamed[(string) $rawName] = $out['name'];
+        }
         $out['label'] = $label ?? [$this->lang => $out['name']];
         foreach (['hint', 'required_message', 'constraint_message'] as $key) {
             $text = $this->text($q[$key] ?? ($key === 'hint' ? ($q['description'] ?? ($q['help'] ?? null)) : null));
@@ -339,9 +345,11 @@ final class FormNormalizer
         foreach ($this->recoded as $codes) {
             $map += $codes;
         }
+        $names = $this->renamed;
         foreach (['relevant', 'constraint', 'calculation', 'choice_filter'] as $field) {
             if (is_string($node[$field] ?? null)) {
-                $node[$field] = (string) preg_replace_callback("/'([^']*)'/", static fn(array $m): string => "'" . ($map[$m[1]] ?? $m[1]) . "'", $node[$field]);
+                $expr = (string) preg_replace_callback('/\$\{([^}]*)\}/', static fn(array $m): string => '${' . ($names[$m[1]] ?? $m[1]) . '}', $node[$field]);
+                $node[$field] = (string) preg_replace_callback("/'([^']*)'/", static fn(array $m): string => "'" . ($map[$m[1]] ?? $m[1]) . "'", $expr);
             }
         }
         if (is_array($node['items'] ?? null)) {

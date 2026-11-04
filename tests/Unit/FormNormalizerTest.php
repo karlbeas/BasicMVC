@@ -25,6 +25,7 @@ final class FormNormalizerTest extends TestCase
                     ['type' => 'single_choice', 'name' => 'sexe', 'question' => 'Votre sexe ?', 'options' => ['Homme', 'Femme', 'Préfère ne pas dire'], 'required' => 'oui', 'analysis' => ['role' => 'demographic']],
                     ['type' => 'number', 'name' => 'âge', 'label' => 'Votre âge', 'required' => 'yes', 'constraint' => '. >= 15', 'constraint_message' => 'Au moins 15 ans'],
                     ['type' => 'rating', 'name' => 'satisfaction', 'label' => 'Satisfaction globale', 'min' => 1, 'max' => 5, 'relevant' => "\${sexe} = 'Préfère ne pas dire'"],
+                    ['type' => 'decimal', 'name' => 'dépense', 'label' => 'Dépense', 'relevant' => '${âge} >= 18'],
                     ['type' => 'yes_no', 'name' => 'revenir', 'label' => 'Reviendrez-vous ?'],
                     ['type' => 'checkbox', 'name' => 'services', 'label' => 'Services utilisés', 'choices' => 'Conseil; Vente; Livraison à domicile'],
                     ['type' => 'textarea', 'name' => 'commentaire', 'label' => 'Commentaires', 'placeholder' => 'Votre avis…', 'analysis' => ['role' => 'feedback']],
@@ -51,6 +52,7 @@ final class FormNormalizerTest extends TestCase
         self::assertSame(['homme', 'femme', 'prefere_ne_pas_dire'], array_column($form['choice_lists'][$q['sexe']['choices']], 'value'));
         self::assertSame("\${sexe} = 'prefere_ne_pas_dire'", $q['satisfaction']['relevant'], 'expression follows the recoded choice');
         self::assertSame('integer', $q['age']['type'], 'accented name made ASCII');
+        self::assertSame('${age} >= 18', $q['depense']['relevant'], 'references follow renamed questions');
         self::assertSame(['fr' => 'Au moins 15 ans'], $q['age']['constraint_message']);
         self::assertSame(['min' => 1, 'max' => 5], $q['satisfaction']['scale']);
         self::assertSame(['oui', 'non'], array_column($form['choice_lists'][$q['revenir']['choices']], 'value'));
