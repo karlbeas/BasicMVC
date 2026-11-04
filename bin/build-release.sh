@@ -21,7 +21,8 @@ composer install --working-dir="$STAGE" --no-dev --optimize-autoloader --classma
     --no-interaction --no-progress --prefer-dist
 
 # Dependencies' own tests/docs are useless on the server (present when installed from source).
-find "$STAGE/vendor" -mindepth 3 -maxdepth 3 -type d \( -name tests -o -name Tests -o -name docs \) -prune -exec rm -rf {} +
+find "$STAGE/vendor" -mindepth 3 -maxdepth 3 \( -name tests -o -name Tests -o -name docs -o -name examples -o -name '.*' \) -prune -exec rm -rf {} +
+find "$STAGE/vendor" -mindepth 3 -maxdepth 3 -type f \( -name '*.dist' -o -name '*.xml' -o -name '*.yml' -o -name '*.neon' \) -delete
 
 printf '# Internal directory: never served over HTTP.\nRequire all denied\n' > "$STAGE/vendor/.htaccess"
 mkdir -p "$STAGE/storage/logs" "$STAGE/storage/cache" "$STAGE/storage/sessions" "$STAGE/storage/uploads"
