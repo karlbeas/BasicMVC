@@ -64,6 +64,14 @@ bash bin/build-release.sh [version]          # archive de déploiement (vendor/ 
 - Tests obligatoires pour : le schéma de formulaire, chaque convertisseur d'import/export, chaque calcul statistique (jeux de données étalons dans `tests/fixtures/` ; fixtures invalides nommées `<code_erreur>[--variante].json`).
 - Toute décision d'architecture → un fichier `docs/adr/NNNN-titre.md`.
 
+## Livraison
+
+**À chaque version développée**, construire l'archive installable sur l'hébergement mutualisé et la remettre à l'utilisateur (fichier zip) :
+
+```bash
+bash bin/build-release.sh X.Y.Z   # → build/f2s-pro-X.Y.Z.zip (versionnage sémantique, à reporter dans l'état d'avancement)
+```
+
 ## Où en est le projet
 
 Voir la section « État d'avancement » à la fin de `docs/MANIFEST.md`. **Mets-la à jour à la fin de chaque session de travail.**
