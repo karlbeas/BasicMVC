@@ -79,7 +79,9 @@ final class AiGateway
         $table = $this->config->get('ai.prices', []);
         $prices = is_array($table) ? ($table[$model] ?? null) : null;
         if (!is_array($prices)) {
-            return 0;
+            // Unknown model: never count it as free, otherwise the daily budget would not apply.
+            $prices = $this->config->get('ai.prices_default', [2.0, 10.0]);
+            $prices = is_array($prices) ? $prices : [2.0, 10.0];
         }
         // Prices are $ per million tokens, so tokens × price = micro-dollars.
         return (int) round($promptTokens * (float) ($prices[0] ?? 0) + $completionTokens * (float) ($prices[1] ?? 0));

@@ -26,7 +26,9 @@ final class InstallerTest extends DatabaseTestCase
 
     protected function tearDown(): void
     {
-        exec('rm -rf ' . escapeshellarg($this->root));
+        if (isset($this->root)) { // not set when the test was skipped (no database)
+            exec('rm -rf ' . escapeshellarg($this->root));
+        }
     }
 
     /** @return array{db_host: string, db_port: int, db_name: string, db_user: string, db_password: string, app_url: string, https: bool, locale: string} */

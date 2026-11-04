@@ -10,12 +10,17 @@ return [
     'api_key' => Env::get('MAMMOUTH_API_KEY', ''),
     'timeout_seconds' => Env::int('AI_TIMEOUT_SECONDS', 25),
     'daily_budget_usd_per_org' => (float) Env::get('AI_DAILY_BUDGET_USD_PER_ORG', '0.50'),
+    // Model IDs as listed on https://model-explorer.mammouth.ai/ (checked 2026-11-04).
+    // Each "<usage>_fallback" comes from another provider, used when the first one fails.
     'models' => [
         'form' => Env::get('AI_MODEL_FORM', 'gpt-6-luna'),
-        'form_fallback' => Env::get('AI_MODEL_FORM_FALLBACK', 'deepseek-v4.1-flash'),
+        'form_fallback' => Env::get('AI_MODEL_FORM_FALLBACK', 'claude-haiku-5-5'),
         'analysis_plan' => Env::get('AI_MODEL_ANALYSIS_PLAN', 'deepseek-v4.1-flash'),
+        'analysis_plan_fallback' => Env::get('AI_MODEL_ANALYSIS_PLAN_FALLBACK', 'glm-5.3-flash'),
         'report' => Env::get('AI_MODEL_REPORT', 'gpt-6-luna'),
+        'report_fallback' => Env::get('AI_MODEL_REPORT_FALLBACK', 'claude-haiku-5-5'),
         'report_premium' => Env::get('AI_MODEL_REPORT_PREMIUM', 'claude-sonnet-5-5'),
+        'report_premium_fallback' => Env::get('AI_MODEL_REPORT_PREMIUM_FALLBACK', 'gpt-6.1-sol'),
         'embeddings' => Env::get('AI_MODEL_EMBEDDINGS', 'text-embedding-3-small'),
     ],
     // Max output tokens per operation (tight on purpose: cost control).
@@ -24,13 +29,10 @@ return [
         'form_generation' => 9000,
         'form_revision' => 9000,
     ],
-    // Published max prices, $ per million tokens [input, output] (MANIFEST §5, Nov. 2026 — re-check before going live).
-    'prices' => [
-        'gpt-6-luna' => [0.10, 0.50],
-        'deepseek-v4.1-flash' => [0.22, 0.66],
-        'claude-sonnet-5-5' => [2.0, 10.0],
-        'text-embedding-3-small' => [0.02, 0.0],
-    ],
+    // $ per million tokens [input, output] for every Mammouth model (config/ai_prices.php).
+    'prices' => require __DIR__ . '/ai_prices.php',
+    // Applied to a model missing from the price list, so the daily budget still counts it.
+    'prices_default' => [2.0, 10.0],
     // AI credit scale (MANIFEST §2).
     'credits' => [
         'form_generation' => 5,

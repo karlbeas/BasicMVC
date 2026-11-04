@@ -238,16 +238,18 @@ Règles :
 
 ## 5. IA — modèles et coûts
 
-Base : API Mammouth `https://api.mammouth.ai/v1`, clé dans `MAMMOUTH_API_KEY`. Tarifs maximum publiés (nov. 2026), en $ par million de tokens — **à revérifier avant déploiement** (https://info.mammouth.ai/docs/api-quick-start/).
+Base : API Mammouth `https://api.mammouth.ai/v1`, clé dans `MAMMOUTH_API_KEY`. Tarifs en $ par million de tokens, vérifiés le 2026-11-04 (https://model-explorer.mammouth.ai/).
 
-| Usage | Modèle par défaut | Secours | Entrée / Sortie ($/M) du modèle par défaut |
+| Usage | Modèle par défaut | Secours (autre fournisseur) | Entrée / Sortie ($/M) du modèle par défaut |
 | --- | --- | --- | --- |
-| Génération et retouche de questionnaire | `gpt-6-luna` | `deepseek-v4.1-flash` | 0,10 / 0,50 |
-| Structuration Word/PDF → formulaire | `gpt-6-luna` | `qwen3.8-flash` | 0,10 / 0,50 |
+| Génération et retouche de questionnaire | `gpt-6-luna` | `claude-haiku-5-5` | 0,10 / 0,50 |
+| Structuration Word/PDF → formulaire | `gpt-6-luna` | `glm-5.3-flash` | 0,10 / 0,50 |
 | Plan d'analyse (« Ask My Survey ») | `deepseek-v4.1-flash` | `glm-5.3-flash` | 0,22 / 0,66 |
 | Synthèses et rapport standard | `gpt-6-luna` | `claude-haiku-5-5` | 0,10 / 0,50 |
 | Rapport premium (option en crédits) | `claude-sonnet-5-5` | `gpt-6.1-sol` | 2 / 10 |
-| Thèmes des réponses ouvertes | `text-embedding-3-small` + `gpt-6-luna` | — | 0,02 (embeddings) |
+| Thèmes des réponses ouvertes | `text-embedding-3-small` + `gpt-6-luna` | — | 0,022 (embeddings) |
+
+> Identifiants et prix **vérifiés le 2026-11-04** sur https://model-explorer.mammouth.ai/ (liste fournie par le porteur de projet) : table complète dans `config/ai_prices.php` (107 modèles). `qwen3.8-flash`, prévu initialement, n'existe pas chez Mammouth : remplacé par `glm-5.3-flash`. Un modèle absent de la table est compté au tarif prudent de 2 / 10 $ pour que le plafond quotidien s'applique toujours.
 
 Coûts simulés (à 0,10 / 0,50 $) : questionnaire ≈ 0,0023 $ ; retouche ≈ 0,0012 $ ; synthèse ≈ 0,0014 $ ; rapport ≈ 0,005 $.
 
@@ -378,6 +380,7 @@ Avant acquisition, rémunération, fiscalité et support. Indicateurs à suivre 
 | 2026-11-04 | 1 — Socle (**v0.2.0**, `f2s-pro-0.2.0-public_html.zip`) | Installation « prête à l'emploi » dans `public_html` : zip à extraire tel quel, assistant web `/install` (vérifications, code d'installation à usage unique, test de la base, migrations, écriture de `.env`, jeton CRON, auto-désactivation), `.htaccess` de refus dans chaque dossier interne. Testé sous Apache. 71 tests. | Phase 1 (v0.3.0) : éditeur visuel, lien/QR, collecte des réponses ; puis v0.4.0 : IA et imports |
 | 2026-11-04 | 1 — Collecte (**v0.3.0**, `f2s-pro-0.3.0-public_html.zip`) | **Éditeur visuel** (sections, 13 types, choix, échelles, matrices, traductions, logique `relevant`/`constraint`, rôle analytique) et création d'un formulaire vierge ; **campagnes** sur une version publiée (lien court `/f/xxxx`, QR code SVG local, partage WhatsApp, date de fin, plafond de réponses, code d'accès, clôture/réouverture) avec quotas de l'offre (1 campagne / 90 jours et 100 réponses en gratuit) ; **formulaire public mobile** (FR/EN, logique conditionnelle en direct, « Autre (préciser) », filigrane gratuit, anti-doublon `submission_uuid`, pot de miel, aucune IP stockée) ; **validation serveur** complète (types, choix, obligatoire si pertinent, contraintes, calculs) via un évaluateur d'expressions XLSForm sûr, jumeau PHP/JS testé sur le même jeu de cas ; stockage brut + `data_json` + projection `answers` ; liste des réponses ; **exports CSV (Excel FR, anti-injection de formules) et JSON** ; migrations appliquées automatiquement par le CRON après une mise à jour (page « mise à jour en cours » entre-temps). 128 tests, test navigateur de bout en bout. | v0.4.0 : création par IA et imports Excel/CSV/XLSForm/Kobo/ODK |
 | 2026-11-04 | 1 — IA + imports (**v0.4.0**, `f2s-pro-0.4.0-public_html.zip`) | **Création par IA** (description → plan de sections → questionnaire F2S validé, une réparation automatique max, tâche reprenable suivie en direct) et **retouche par IA** d'un brouillon ; `AiGateway` (Mammouth, modèle de secours, journal `token_usage` avec coût, budget quotidien) ; **crédits IA** (`credit_ledger`, barème §2, débit unique après succès) ; **imports** XLSForm (Kobo/ODK/SurveyCTO), listes de questions Excel/CSV (UTF-8/Windows-1252, ; ou ,), JSON, avec **compte rendu** repris/transformés/non repris/non pris en charge et **confirmation** ; lecteur XLSX maison (ADR 0004) ; jeux étalons générés par openpyxl. 148 tests, test navigateur de l'import. | Phase 2 : tableau de bord d'analyse, croisements, alertes qualité, rapport PDF/Word ; invitations, mot de passe oublié, changement d'organisation |
+| 2026-11-04 | 1 — Correctif (**v0.4.1**, `f2s-pro-0.4.1-public_html.zip`) | Modèles et prix **vérifiés** sur la liste Mammouth : table complète des 107 modèles (`config/ai_prices.php`), secours d'un autre fournisseur pour chaque usage (`claude-haiku-5-5` pour les questionnaires), embeddings à 0,022 $ ; un modèle inconnu n'est plus compté gratuit (le plafond quotidien s'applique toujours). Clés `.env` facultatives `AI_MODEL_*_FALLBACK` ajoutées (aucune action requise). | Phase 2 (v0.5.0) |
 
 ### Prochaine tâche à donner à Claude Code
 
