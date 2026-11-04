@@ -52,6 +52,8 @@ return static function (Router $r): void {
     $r->post('/imports/{import}/confirm', [ImportController::class, 'confirm'], ['auth']);
     $r->post('/imports/{import}/cancel', [ImportController::class, 'cancel'], ['auth']);
     $r->post('/forms/{form}/drafts', [FormController::class, 'newDraft'], ['auth']);
+    $r->post('/forms/{form}/unpublish', [FormController::class, 'unpublish'], ['auth']);
+    $r->post('/forms/{form}/delete', [FormController::class, 'destroy'], ['auth']);
     $r->post('/forms/{form}/versions/{version}', [FormController::class, 'updateDraft'], ['auth']);
     $r->post('/forms/{form}/versions/{version}/publish', [FormController::class, 'publish'], ['auth']);
     $r->get('/forms/{form}/versions/{version}/json', [FormController::class, 'exportJson'], ['auth']);

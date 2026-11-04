@@ -17,7 +17,7 @@ final class ProjectRepository
     {
         return $this->db->fetchAll(
             'SELECT p.id, p.public_id, p.name, p.description, p.created_at, w.name AS workspace_name,
-                    (SELECT COUNT(*) FROM forms f WHERE f.project_id = p.id AND f.organization_id = p.organization_id) AS form_count
+                    (SELECT COUNT(*) FROM forms f WHERE f.project_id = p.id AND f.organization_id = p.organization_id AND f.archived_at IS NULL) AS form_count
              FROM projects p JOIN workspaces w ON w.id = p.workspace_id AND w.organization_id = p.organization_id
              WHERE p.organization_id = ? AND p.archived_at IS NULL
              ORDER BY p.created_at DESC, p.id DESC',

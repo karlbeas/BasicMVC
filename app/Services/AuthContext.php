@@ -10,7 +10,7 @@ final class AuthContext
     /** Role => abilities. "*" grants everything. */
     private const ABILITIES = [
         'owner' => ['*'],
-        'admin' => ['org.manage', 'project.create', 'project.view', 'form.create', 'form.edit', 'form.publish', 'data.analyze'],
+        'admin' => ['org.manage', 'project.create', 'project.view', 'form.create', 'form.edit', 'form.publish', 'form.delete', 'data.analyze'],
         'designer' => ['project.create', 'project.view', 'form.create', 'form.edit', 'form.publish'],
         'collector' => ['project.view'],
         'analyst' => ['project.view', 'data.analyze'],

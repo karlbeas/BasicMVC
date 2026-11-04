@@ -54,7 +54,7 @@ return [
     'auth.login.submit' => 'Se connecter',
     'auth.login.no_account' => 'Pas encore de compte ?',
     'auth.register.title' => 'Créer un compte',
-    'auth.register.free_plan' => 'Offre gratuite : 1 campagne publiée par période de 90 jours, sans carte bancaire.',
+    'auth.register.free_plan' => 'Offre gratuite : jusqu\'à 5 campagnes publiées et 70 questions par formulaire, sans carte bancaire.',
     'auth.register.submit' => 'Créer mon compte',
     'auth.password_hint' => 'Au moins 10 caractères.',
     'auth.accept_terms' => "J'accepte les conditions d'utilisation et la politique de confidentialité.",
@@ -459,4 +459,17 @@ return [
     'ai.job.long_running' => 'L\'étape en cours dure depuis :seconds s : l\'hébergeur a peut-être interrompu le traitement. Il sera relancé automatiquement (3 tentatives au maximum).',
     'ai.step.revise_parts' => 'Étape 2/3 : modification (partie :current sur :total)',
     'ai.job.keep_open' => 'Gardez cette page ouverte jusqu\'à la fin (1 à 2 minutes) : c\'est elle qui fait avancer la rédaction.',
+
+    // v0.4.5 — unpublish / delete
+    'forms.unpublish' => 'Dépublier',
+    'forms.unpublish_help' => 'Ferme les campagnes (le lien public n\'accepte plus de réponses) et ouvre une version brouillon modifiable.',
+    'forms.unpublish_confirm' => 'Dépublier ce formulaire ? :count campagne(s) ouverte(s) seront closes. Les réponses déjà reçues sont conservées.',
+    'forms.unpublished' => 'Formulaire dépublié : :count campagne(s) close(s).',
+    'forms.unpublished_draft' => 'Une nouvelle version brouillon est ouverte : vous pouvez le modifier.',
+    'forms.delete' => 'Supprimer ce formulaire',
+    'forms.delete_help' => 'Le formulaire disparaît de vos projets et ses liens publics cessent de fonctionner. Ses :count réponse(s) sont conservées en base (récupérables par l\'administration) mais ne seront plus accessibles ici.',
+    'forms.delete_type' => 'Pour confirmer, saisissez l\'identifiant du formulaire : :key',
+    'forms.delete_button' => 'Supprimer définitivement de mes projets',
+    'forms.delete_confirm_mismatch' => 'Identifiant de confirmation incorrect : le formulaire n\'a pas été supprimé.',
+    'forms.deleted' => 'Formulaire « :title » supprimé.',
 ];

@@ -55,6 +55,7 @@ final class CampaignRepository
     {
         return $this->db->fetchOne(
             'SELECT c.*, o.plan_id, p.code AS plan_code FROM campaigns c
+             JOIN forms f ON f.id = c.form_id AND f.organization_id = c.organization_id AND f.archived_at IS NULL
              JOIN organizations o ON o.id = c.organization_id AND o.deleted_at IS NULL
              JOIN plans p ON p.id = o.plan_id
              WHERE c.token = ?',
@@ -81,6 +82,15 @@ final class CampaignRepository
     public function countCreatedSince(int $organizationId, string $since): int
     {
         return (int) $this->db->fetchValue('SELECT COUNT(*) FROM campaigns WHERE organization_id = ? AND created_at >= ?', [$organizationId, $since]);
+    }
+
+    /** Closes every open campaign of a form; returns how many were closed. */
+    public function closeAllForForm(int $organizationId, int $formId): int
+    {
+        return $this->db->execute(
+            "UPDATE campaigns SET status = 'closed', closed_at = ?, updated_at = ? WHERE organization_id = ? AND form_id = ? AND status = 'open'",
+            [gmdate('Y-m-d H:i:s'), gmdate('Y-m-d H:i:s'), $organizationId, $formId],
+        );
     }
 
     public function setStatus(int $organizationId, int $id, string $status): void

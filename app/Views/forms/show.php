@@ -8,6 +8,8 @@
 /** @var bool $canEdit */
 /** @var bool $canPublish */
 /** @var list<array<string, mixed>> $campaigns */
+/** @var bool $canDelete */
+/** @var int $responseCount */
 /** @var list<array<string, mixed>> $publishedVersions */
 $title = (string) $form['title'];
 $isDraft = $current !== null && $current['status'] === 'draft';
@@ -50,6 +52,14 @@ $base = 'forms/' . $form['public_id'];
 
 <?php if ($current !== null && !$isDraft): ?>
     <div class="alert alert-info small"><?= e(t('forms.immutable_notice')) ?></div>
+<?php endif; ?>
+<?php $openCampaigns = count(array_filter($campaigns, static fn (array $c): bool => $c['status'] === 'open')); ?>
+<?php if ($canPublish && ($openCampaigns > 0 || ($current !== null && !$isDraft))): ?>
+    <form method="post" action="<?= e(url($base . '/unpublish')) ?>" class="mb-3" data-confirm="<?= e(t('forms.unpublish_confirm', ['count' => $openCampaigns])) ?>">
+        <?= csrf_field() ?>
+        <button class="btn btn-outline-warning btn-sm"><?= e(t('forms.unpublish')) ?></button>
+        <span class="small text-muted ms-2"><?= e(t('forms.unpublish_help')) ?></span>
+    </form>
 <?php endif; ?>
 
 <div class="card shadow-sm mb-4">
@@ -156,3 +166,18 @@ $base = 'forms/' . $form['public_id'];
         <?php endif; ?>
     </div>
 </div>
+
+<?php if ($canDelete): ?>
+    <details class="card border-danger mt-4">
+        <summary class="card-header text-danger"><?= e(t('forms.delete')) ?></summary>
+        <form method="post" action="<?= e(url($base . '/delete')) ?>" class="card-body">
+            <?= csrf_field() ?>
+            <p class="small mb-2"><?= e(t('forms.delete_help', ['count' => $responseCount])) ?></p>
+            <label class="form-label small" for="confirm-key"><?= e(t('forms.delete_type', ['key' => (string) $form['form_key']])) ?></label>
+            <div class="d-flex gap-2 flex-wrap">
+                <input class="form-control form-control-sm font-monospace w-auto" id="confirm-key" name="confirm" autocomplete="off" required>
+                <button class="btn btn-danger btn-sm"><?= e(t('forms.delete_button')) ?></button>
+            </div>
+        </form>
+    </details>
+<?php endif; ?>

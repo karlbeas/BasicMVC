@@ -121,15 +121,20 @@ final class FormLifecycleTest extends DatabaseTestCase
     {
         $ctx = $this->newAccount();
         $form = json_decode((string) file_get_contents($this->app->root . '/tests/fixtures/forms/valid/minimal.json'), true);
-        for ($i = 1; $i <= 29; ++$i) {
+        for ($i = 1; $i <= 68; ++$i) {
             $form['items'][] = ['kind' => 'question', 'type' => 'text', 'name' => 'q' . $i, 'label' => ['fr' => 'Q' . $i, 'en' => 'Q' . $i]];
         }
+        $projectId = $this->projectFor($ctx);
+        $this->service()->createFromJson($ctx, $projectId, (string) json_encode($form)); // 70 questions: allowed (temporary free limit)
+
+        $form['items'][] = ['kind' => 'question', 'type' => 'text', 'name' => 'q69', 'label' => ['fr' => 'Q69', 'en' => 'Q69']];
         try {
-            $this->service()->createFromJson($ctx, $this->projectFor($ctx), (string) json_encode($form));
-            self::fail('31 questions must exceed the free plan (30)');
+            $this->service()->createFromJson($ctx, $projectId, (string) json_encode($form));
+            self::fail('71 questions must exceed the free plan (70)');
         } catch (QuotaExceededException $e) {
             self::assertSame('questions_per_form', $e->limitKey);
-            self::assertSame(31, $e->actual);
+            self::assertSame(70, $e->limit);
+            self::assertSame(71, $e->actual);
         }
     }
 

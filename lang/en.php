@@ -54,7 +54,7 @@ return [
     'auth.login.submit' => 'Log in',
     'auth.login.no_account' => 'No account yet?',
     'auth.register.title' => 'Create an account',
-    'auth.register.free_plan' => 'Free plan: 1 published campaign per rolling 90 days, no card required.',
+    'auth.register.free_plan' => 'Free plan: up to 5 published campaigns and 70 questions per form, no card required.',
     'auth.register.submit' => 'Create my account',
     'auth.password_hint' => 'At least 10 characters.',
     'auth.accept_terms' => 'I accept the terms of use and the privacy policy.',
@@ -459,4 +459,17 @@ return [
     'ai.job.long_running' => 'The current step has been running for :seconds s: the host may have interrupted it. It will be restarted automatically (3 attempts at most).',
     'ai.step.revise_parts' => 'Step 2/3: editing (part :current of :total)',
     'ai.job.keep_open' => 'Keep this page open until the end (1 to 2 minutes): it drives the writing.',
+
+    // v0.4.5 — unpublish / delete
+    'forms.unpublish' => 'Unpublish',
+    'forms.unpublish_help' => 'Closes the campaigns (the public link no longer accepts responses) and opens an editable draft version.',
+    'forms.unpublish_confirm' => 'Unpublish this form? :count open campaign(s) will be closed. Responses already received are kept.',
+    'forms.unpublished' => 'Form unpublished: :count campaign(s) closed.',
+    'forms.unpublished_draft' => 'A new draft version is open: you can edit it.',
+    'forms.delete' => 'Delete this form',
+    'forms.delete_help' => 'The form disappears from your projects and its public links stop working. Its :count response(s) are kept in the database (recoverable by the administration) but will no longer be accessible here.',
+    'forms.delete_type' => 'To confirm, type the form identifier: :key',
+    'forms.delete_button' => 'Delete from my projects',
+    'forms.delete_confirm_mismatch' => 'Wrong confirmation identifier: the form was not deleted.',
+    'forms.deleted' => 'Form ":title" deleted.',
 ];

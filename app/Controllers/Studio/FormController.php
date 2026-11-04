@@ -126,6 +126,11 @@ final class FormController extends Controller
             'schemaPretty' => $current !== null ? json_encode(json_decode((string) $current['schema_json']), JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) : '',
             'canEdit' => $ctx->can('form.edit'),
             'canPublish' => $ctx->can('form.publish'),
+            'canDelete' => $ctx->can('form.delete'),
+            'responseCount' => (int) $this->app->db()->fetchValue(
+                'SELECT COUNT(*) FROM submissions s JOIN campaigns c ON c.id = s.campaign_id WHERE c.organization_id = ? AND c.form_id = ?',
+                [$ctx->organizationId(), $form['id']],
+            ),
             'result' => null,
             'campaigns' => (new \App\Models\CampaignRepository($this->app->db()))->forForm($ctx->organizationId(), (int) $form['id']),
             'publishedVersions' => array_values(array_filter($versions, static fn(array $v): bool => $v['status'] === 'published')),
@@ -178,6 +183,32 @@ final class FormController extends Controller
         $this->flash('success', t('forms.draft_created'));
 
         return $this->redirect('/forms/' . $form['public_id']);
+    }
+
+    public function unpublish(Request $request): Response
+    {
+        $ctx = $this->authorize('form.publish');
+        $form = $this->form($ctx->organizationId(), $request);
+        $result = $this->service()->unpublish($ctx, (int) $form['id']);
+        $this->flash('success', t('forms.unpublished', ['count' => $result['closed_campaigns']]) . ($result['draft_version_id'] !== null ? ' ' . t('forms.unpublished_draft') : ''));
+
+        return $this->redirect('/forms/' . $form['public_id']);
+    }
+
+    public function destroy(Request $request): Response
+    {
+        $ctx = $this->authorize('form.delete');
+        $form = $this->form($ctx->organizationId(), $request);
+        if ($request->string('confirm') !== (string) $form['form_key']) {
+            $this->flash('danger', t('forms.delete_confirm_mismatch'));
+
+            return $this->redirect('/forms/' . $form['public_id']);
+        }
+        $project = (new ProjectRepository($this->app->db()))->find($ctx->organizationId(), (int) $form['project_id']);
+        $this->service()->delete($ctx, (int) $form['id']);
+        $this->flash('success', t('forms.deleted', ['title' => (string) $form['title']]));
+
+        return $this->redirect('/projects/' . ($project['public_id'] ?? ''));
     }
 
     /** JSON export is always available, on every plan (MANIFEST §2). */

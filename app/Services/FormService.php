@@ -97,6 +97,50 @@ final class FormService
         });
     }
 
+    /**
+     * Takes a form offline: closes all its open campaigns (public links stop accepting
+     * responses) and, if the current version is published, opens a new editable draft.
+     * The published version itself is never modified (rule 3): it stays in the history
+     * with its responses.
+     *
+     * @return array{closed_campaigns: int, draft_version_id: ?int}
+     */
+    public function unpublish(AuthContext $ctx, int $formId): array
+    {
+        $orgId = $ctx->organizationId();
+        $form = $this->db->fetchOne('SELECT * FROM forms WHERE organization_id = ? AND id = ? AND archived_at IS NULL', [$orgId, $formId]) ?? throw new \DomainException('Form not found');
+
+        return $this->db->transaction(function () use ($ctx, $orgId, $form, $formId): array {
+            $closed = (new \App\Models\CampaignRepository($this->db))->closeAllForForm($orgId, $formId);
+            $current = $form['current_version_id'] !== null ? $this->forms->findVersion($orgId, (int) $form['current_version_id']) : null;
+            $draft = $current !== null && $current['status'] === 'published' ? $this->newDraft($ctx, $formId) : null;
+            $this->audit->log($orgId, $ctx->userId(), 'form.unpublished', 'form', $formId, ['closed_campaigns' => $closed, 'draft_version_id' => $draft]);
+
+            return ['closed_campaigns' => $closed, 'draft_version_id' => $draft];
+        });
+    }
+
+    /**
+     * Deletes a form for the user: hidden everywhere, campaigns closed, public links dead.
+     * Soft delete (archived_at): versions and responses stay in the database, so a deletion
+     * can be undone from the future control console and no response is destroyed by mistake.
+     */
+    public function delete(AuthContext $ctx, int $formId): void
+    {
+        $orgId = $ctx->organizationId();
+        $this->db->transaction(function () use ($ctx, $orgId, $formId): void {
+            (new \App\Models\CampaignRepository($this->db))->closeAllForForm($orgId, $formId);
+            $updated = $this->db->execute(
+                'UPDATE forms SET archived_at = ?, updated_at = ? WHERE organization_id = ? AND id = ? AND archived_at IS NULL',
+                [gmdate('Y-m-d H:i:s'), gmdate('Y-m-d H:i:s'), $orgId, $formId],
+            );
+            if ($updated !== 1) {
+                throw new \DomainException('Form not found');
+            }
+            $this->audit->log($orgId, $ctx->userId(), 'form.deleted', 'form', $formId);
+        });
+    }
+
     /** New draft copied from the latest version, to edit a published form. */
     public function newDraft(AuthContext $ctx, int $formId): int
     {

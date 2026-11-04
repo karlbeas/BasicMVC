@@ -123,17 +123,22 @@ final class CollectTest extends DatabaseTestCase
         $id = $this->campaigns()->open($f['ctx'], $f['form_id'], $f['version_id'], ['response_limit' => '5000'] + self::NO_OPTIONS);
         self::assertSame(100, (int) $this->campaignRow($f['ctx'], $id)['response_limit'], 'Response limit never exceeds the plan (free: 100)');
 
+        // Temporary free limit: 5 published campaigns (open at once and per rolling 90 days).
+        for ($i = 2; $i <= 5; ++$i) {
+            $this->campaigns()->open($f['ctx'], $f['form_id'], $f['version_id'], self::NO_OPTIONS);
+        }
         try {
             $this->campaigns()->open($f['ctx'], $f['form_id'], $f['version_id'], self::NO_OPTIONS);
-            self::fail('Free plan: one open campaign');
+            self::fail('Free plan: 5 open campaigns at most');
         } catch (QuotaExceededException $e) {
             self::assertSame('active_campaigns', $e->limitKey);
+            self::assertSame(5, $e->limit);
         }
 
         $this->campaigns()->setOpen($f['ctx'], $id, false);
         try {
             $this->campaigns()->open($f['ctx'], $f['form_id'], $f['version_id'], self::NO_OPTIONS);
-            self::fail('Free plan: one campaign per rolling 90 days, even after closing');
+            self::fail('Free plan: 5 campaigns per rolling 90 days, even after closing one');
         } catch (QuotaExceededException $e) {
             self::assertSame('published_campaigns_rolling_90_days', $e->limitKey);
         }
@@ -200,5 +205,47 @@ final class CollectTest extends DatabaseTestCase
         self::assertNull((new CampaignRepository($this->db()))->find($other->organizationId(), $id));
         $this->expectException(\DomainException::class);
         $this->campaigns()->setOpen($other, $id, false);
+    }
+
+    public function testUnpublishClosesCampaignsAndOpensADraftWithoutTouchingThePublishedVersion(): void
+    {
+        $f = $this->publishedForm();
+        $id = $this->campaigns()->open($f['ctx'], $f['form_id'], $f['version_id'], self::NO_OPTIONS);
+        (new SubmissionService($this->db()))->submit($this->campaignRow($f['ctx'], $id), $f['schema'], $this->answers(), 'fr');
+        $publishedBefore = $this->db()->fetchOne('SELECT schema_hash, status FROM form_versions WHERE id = ?', [$f['version_id']]);
+        $service = new FormService($this->db(), FormValidator::default(), new AuditLogger($this->db()));
+
+        $result = $service->unpublish($f['ctx'], $f['form_id']);
+
+        self::assertSame(1, $result['closed_campaigns']);
+        self::assertNotNull($result['draft_version_id']);
+        self::assertSame('closed', CampaignService::closedReason($this->campaignRow($f['ctx'], $id), 0), 'public link no longer accepts responses');
+        self::assertSame($publishedBefore, $this->db()->fetchOne('SELECT schema_hash, status FROM form_versions WHERE id = ?', [$f['version_id']]), 'published version unchanged');
+        self::assertSame(1, (int) $this->db()->fetchValue('SELECT COUNT(*) FROM submissions WHERE campaign_id = ?', [$id]), 'responses kept');
+        self::assertSame((int) $result['draft_version_id'], (int) $this->db()->fetchValue('SELECT current_version_id FROM forms WHERE id = ?', [$f['form_id']]));
+    }
+
+    public function testDeleteHidesTheFormKillsPublicLinksAndKeepsResponses(): void
+    {
+        $f = $this->publishedForm();
+        $id = $this->campaigns()->open($f['ctx'], $f['form_id'], $f['version_id'], self::NO_OPTIONS);
+        $token = (string) (new CampaignRepository($this->db()))->find($f['ctx']->organizationId(), $id)['token'];
+        (new SubmissionService($this->db()))->submit($this->campaignRow($f['ctx'], $id), $f['schema'], $this->answers(), 'fr');
+        $publicId = (string) $this->db()->fetchValue('SELECT public_id FROM forms WHERE id = ?', [$f['form_id']]);
+        $service = new FormService($this->db(), FormValidator::default(), new AuditLogger($this->db()));
+        $other = $this->newAccount('intruder');
+
+        try {
+            $service->delete($other, $f['form_id']);
+            self::fail('Another organization cannot delete the form');
+        } catch (\DomainException) {
+        }
+        $service->delete($f['ctx'], $f['form_id']);
+
+        self::assertNull((new \App\Models\FormRepository($this->db()))->findByPublicId($f['ctx']->organizationId(), $publicId));
+        self::assertNull((new CampaignRepository($this->db()))->findByToken($token), 'public link is dead');
+        self::assertSame(1, (int) $this->db()->fetchValue('SELECT COUNT(*) FROM submissions WHERE campaign_id = ?', [$id]), 'responses are kept (soft delete)');
+        $this->expectException(\DomainException::class);
+        $service->delete($f['ctx'], $f['form_id']);
     }
 }
