@@ -15,7 +15,8 @@ jQuery(function ($) {
                 return;
             }
             $box.find('[data-step]').text(steps[res.step] || steps.pending || '');
-            setTimeout(poll, tries < 20 ? 2000 : 5000);
+            $box.find('[data-notice]').toggleClass('d-none', !res.notice).text(res.notice || '');
+            setTimeout(poll, tries < 20 ? 3000 : 6000);
         }).fail(function () { setTimeout(poll, 5000); });
     }
     poll();

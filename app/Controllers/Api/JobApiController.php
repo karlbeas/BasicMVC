@@ -18,6 +18,14 @@ use App\Jobs\JobQueue;
  */
 final class JobApiController extends Controller
 {
+    /** "App\\Services\\Ai\\AiException: claude-haiku-5-5 : HTTP 503 — …" → "claude-haiku-5-5 : HTTP 503 — …" */
+    public static function readableError(string $error): string
+    {
+        $error = trim((string) preg_replace('/^[A-Za-z\\\\]+Exception:\s*/', '', $error));
+
+        return mb_substr($error, 0, 200);
+    }
+
     public function show(Request $request): Response
     {
         $ctx = $this->authorize('project.view');
@@ -38,18 +46,34 @@ final class JobApiController extends Controller
         }
         $result = $job['result'] !== null ? json_decode((string) $job['result'], true) : null;
         $progress = $job['progress'] !== null ? json_decode((string) $job['progress'], true) : null;
+        $lastError = self::readableError((string) ($job['error'] ?? ''));
         $data = [
             'status' => $job['status'],
             'step' => is_array($progress) ? ($progress['step'] ?? null) : null,
             'attempts' => (int) $job['attempts'],
+            'max_attempts' => (int) $job['max_attempts'],
+            'elapsed' => max(0, time() - (int) strtotime($job['created_at'] . ' UTC')),
             'error' => is_array($result) ? ($result['error'] ?? null) : ($job['status'] === 'failed' ? 'failed' : null),
+            'notice' => null,
         ];
         if (is_array($result) && isset($result['form_public_id'])) {
             $data['redirect'] = $this->app->url('forms/' . $result['form_public_id'] . '/edit');
         }
         if ($data['error'] !== null) {
-            $key = 'ai.error.' . $data['error'];
-            $data['message'] = t($key, ['limit' => (int) ($result['limit'] ?? 0), 'actual' => (int) ($result['actual'] ?? 0)]);
+            $data['message'] = t('ai.error.' . $data['error'], ['limit' => (int) ($result['limit'] ?? 0), 'actual' => (int) ($result['actual'] ?? 0)]);
+            $detail = is_array($result) && is_string($result['detail'] ?? null) ? $result['detail'] : ($data['error'] === 'failed' ? $lastError : '');
+            if ($detail !== '') {
+                $data['message'] .= ' (' . $detail . ')';
+            }
+        } elseif (in_array($job['status'], ['pending', 'running'], true)) {
+            $cronAge = Dispatcher::heartbeatAge($this->app);
+            if ($job['status'] === 'pending' && (int) $job['attempts'] > 0 && $lastError !== '') {
+                $data['notice'] = t('ai.job.retrying', ['attempt' => (int) $job['attempts'] + 1, 'max' => (int) $job['max_attempts'], 'error' => $lastError]);
+            } elseif ($data['elapsed'] > 45 && ($cronAge === null || $cronAge > 180)) {
+                $data['notice'] = t('ai.job.no_cron');
+            } elseif ($job['status'] === 'pending' && $data['elapsed'] > 20) {
+                $data['notice'] = t('ai.job.waiting_cron');
+            }
         }
 
         return $this->json($data);

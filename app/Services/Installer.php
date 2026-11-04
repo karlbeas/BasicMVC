@@ -133,7 +133,7 @@ final class Installer
             'DB_PASSWORD' => $input['db_password'],
             'MAX_UPLOAD_MB' => 10,
             'JOBS_TIME_BUDGET' => 50,
-            'JOBS_STALE_AFTER' => 600,
+            'JOBS_STALE_AFTER' => 300,
             'CRON_HTTP_TOKEN' => $cronToken,
             'MAMMOUTH_BASE_URL' => 'https://api.mammouth.ai/v1',
             'MAMMOUTH_API_KEY' => '',

@@ -66,14 +66,16 @@ final class FormGenerationHandler implements JobHandler
         $maxTokens = static fn(string $key, int $default): int => $ctx->app->config()->int('ai.max_tokens.' . $key, $default);
         $prompt = static fn(string $name): string => (string) file_get_contents($ctx->app->root . '/app/Prompts/' . $name . '.v1.md');
         $call = function (string $op, string $system, string $user, int $tokens) use ($ctx, $gateway, $orgId, $userId): AiResponse {
-            return $gateway->complete($op, 'form', $system, $user, $tokens, $orgId, $userId, (int) $ctx->job['id']);
+            // CRON (CLI): no PHP time limit, the call may use the full AI timeout. Web: capped by the request deadline.
+            return $gateway->complete($op, 'form', $system, $user, $tokens, $orgId, $userId, (int) $ctx->job['id'], $ctx->canRunLong() ? null : $ctx->deadline());
         };
-        $needsTime = $gateway->timeout() + 3;
+        // Can this process attempt the step now? Otherwise yield: the CRON will run it.
+        $canStart = static fn(string $op): bool => $ctx->canRunLong() || $ctx->secondsLeft() >= $ctx->app->config()->int('ai.step_seconds.' . $op, 90);
 
         try {
             // Step 1 (generate only): plan of sections.
             if ($progress['step'] === 'plan') {
-                if ($ctx->secondsLeft() < $needsTime) {
+                if (!$canStart('form_plan')) {
                     return JobResult::yield($progress);
                 }
                 $plan = $call('form_plan', $prompt('form_plan'), $this->briefText($p, $languages), $maxTokens('form_plan', 1500))->json();
@@ -81,14 +83,12 @@ final class FormGenerationHandler implements JobHandler
                     return JobResult::done(['error' => 'invalid_output']);
                 }
                 $progress = ['step' => 'form', 'plan' => $plan];
-                if ($ctx->secondsLeft() < $needsTime) {
-                    return JobResult::yield($progress);
-                }
+                $ctx->checkpoint($progress); // a later failure retries from the questionnaire, not from the plan
             }
 
             // Step 2: questionnaire (or revision).
             if ($progress['step'] === 'form') {
-                if ($ctx->secondsLeft() < $needsTime) {
+                if (!$canStart($operation)) {
                     return JobResult::yield($progress);
                 }
                 if ($mode === 'revise') {
@@ -103,6 +103,7 @@ final class FormGenerationHandler implements JobHandler
                     $answer = $call('form_generation', $prompt('form_generation'), $user, $maxTokens('form_generation', 9000));
                 }
                 $progress = ['step' => 'validate', 'candidate' => $answer->content, 'repaired' => false] + $progress;
+                $ctx->checkpoint($progress);
             }
 
             // Step 3: validation, with at most one automatic repair.
@@ -114,7 +115,7 @@ final class FormGenerationHandler implements JobHandler
                 if ($progress['repaired'] === true) {
                     return JobResult::done(['error' => 'invalid_output', 'details' => array_slice($result->errors(), 0, 5)]);
                 }
-                if ($ctx->secondsLeft() < $needsTime) {
+                if (!$canStart('form_repair')) {
                     return JobResult::yield($progress);
                 }
                 $errors = implode("\n", array_map(static fn(array $e): string => $e['path'] . ' : ' . $e['message'], array_slice($result->errors(), 0, 15)));
@@ -150,10 +151,13 @@ final class FormGenerationHandler implements JobHandler
                 'credits' => $cost,
             ]);
         } catch (AiException $e) {
-            if (in_array($e->reason, ['budget', 'not_configured'], true)) {
-                return JobResult::done(['error' => $e->reason]);
+            if ($e->reason === 'no_time') {
+                return JobResult::yield($progress);
             }
-            throw $e; // network / HTTP errors: retried with backoff by the queue
+            if (in_array($e->reason, ['budget', 'not_configured', 'auth', 'bad_request'], true)) {
+                return JobResult::done(['error' => $e->reason, 'detail' => mb_substr($e->getMessage(), 0, 300)]);
+            }
+            throw $e; // timeout / network / rate limit / 5xx: retried with backoff, resuming from the last checkpoint
         } catch (QuotaExceededException $e) {
             return JobResult::done(['error' => 'too_many_questions', 'limit' => $e->limit, 'actual' => $e->actual]);
         } catch (FormInvalidException) {

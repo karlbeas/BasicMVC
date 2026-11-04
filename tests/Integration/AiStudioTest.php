@@ -66,13 +66,16 @@ final class AiStudioTest extends DatabaseTestCase
      * @param array<string, mixed> $payload
      * @param array<string, mixed>|null $progress
      */
-    private function runJob(AuthContext $ctx, string $type, array $payload, ?array $progress = null, int $seconds = 120): \App\Jobs\JobResult
+    private function runJob(AuthContext $ctx, string $type, array $payload, ?array $progress = null, int $seconds = 120, bool $cron = true, ?int $jobId = null): \App\Jobs\JobResult
     {
         $queue = new JobQueue($this->db());
-        $job = $queue->find($queue->push($type, $payload, $ctx->organizationId())) ?? [];
+        $job = $queue->find($jobId ?? $queue->push($type, $payload, $ctx->organizationId())) ?? [];
+        $this->lastJobId = (int) $job['id'];
 
-        return (new FormGenerationHandler())->handle(new JobContext($this->app, $job, $payload, $progress, microtime(true) + $seconds));
+        return (new FormGenerationHandler())->handle(new JobContext($this->app, $job, $payload, $progress, microtime(true) + $seconds, $cron));
     }
+
+    private int $lastJobId = 0;
 
     /** @return array<string, mixed> */
     private function brief(AuthContext $ctx, int $projectId): array
@@ -190,14 +193,74 @@ final class AiStudioTest extends DatabaseTestCase
         self::assertSame([], $this->transport->requests);
     }
 
-    public function testYieldsWhenTheRemainingTimeCannotFitACall(): void
+    public function testWebRequestYieldsLongStepsToTheCron(): void
     {
         [$ctx, $projectId] = $this->accountWithProject();
+        $this->transport->responses = [FakeTransport::ok('{"sections": []}')];
 
-        $result = $this->runJob($ctx, 'ai.form_generate', $this->brief($ctx, $projectId), null, 10);
+        // Web request with 28 s left (max_execution_time 30): the short plan step runs here...
+        $result = $this->runJob($ctx, 'ai.form_generate', $this->brief($ctx, $projectId), null, 28, false);
 
+        // ...but the long questionnaire step is left to the CRON (it needs 90 s).
         self::assertSame('yield', $result->status);
-        self::assertSame(['step' => 'plan'], $result->data);
+        self::assertSame('form', $result->data['step']);
+        self::assertCount(1, $this->transport->requests);
+
+        // Too little time even for the plan: nothing is called.
+        $this->transport->requests = [];
+        self::assertSame(['step' => 'plan'], $this->runJob($ctx, 'ai.form_generate', $this->brief($ctx, $projectId), null, 10, false)->data);
+        self::assertSame([], $this->transport->requests);
+    }
+
+    public function testRetryResumesFromTheSavedPlan(): void
+    {
+        [$ctx, $projectId] = $this->accountWithProject();
+        $this->transport->responses = [FakeTransport::ok('{"sections": [{"name": "a"}]}'), new AiException('timeout', 'AI API timeout after 120 s'), new AiException('timeout', 'AI API timeout after 120 s')];
+        try {
+            $this->runJob($ctx, 'ai.form_generate', $this->brief($ctx, $projectId));
+            self::fail('A timeout must be left to the queue retry');
+        } catch (AiException $e) {
+            self::assertSame('timeout', $e->reason);
+        }
+        $saved = json_decode((string) (new JobQueue($this->db()))->find($this->lastJobId)['progress'], true);
+        self::assertSame('form', $saved['step'], 'The plan was checkpointed before the failure');
+
+        $this->transport->requests = [];
+        $this->transport->responses = [FakeTransport::ok($this->minimalForm())];
+        $result = $this->runJob($ctx, 'ai.form_generate', $this->brief($ctx, $projectId), $saved, 120, true, $this->lastJobId);
+
+        self::assertArrayHasKey('form_public_id', $result->data);
+        self::assertCount(1, $this->transport->requests, 'No second plan call on retry');
+    }
+
+    public function testRefusedKeyOrUnknownModelStopsAtOnceWithACause(): void
+    {
+        [$ctx, $projectId] = $this->accountWithProject();
+        $this->transport->responses = [['status' => 401, 'body' => '{"error": {"message": "Invalid API key"}}']];
+        $result = $this->runJob($ctx, 'ai.form_generate', $this->brief($ctx, $projectId));
+        self::assertSame('auth', $result->data['error'] ?? null);
+        self::assertStringContainsString('401', (string) $result->data['detail']);
+        self::assertCount(1, $this->transport->requests, 'A refused key is not retried with the fallback model');
+
+        $this->transport->requests = [];
+        $this->transport->responses = [
+            ['status' => 404, 'body' => '{"error": {"message": "model not found"}}'],
+            ['status' => 400, 'body' => '{"error": {"message": "model not found"}}'],
+        ];
+        $result = $this->runJob($ctx, 'ai.form_generate', $this->brief($ctx, $projectId));
+        self::assertSame('bad_request', $result->data['error'] ?? null);
+        self::assertCount(2, $this->transport->requests, 'An unknown model falls back once, then stops');
+    }
+
+    public function testGatewayCapsTheCallToTheRequestDeadline(): void
+    {
+        [$ctx] = $this->accountWithProject();
+        try {
+            $this->gateway()->complete('t', 'form', 's', 'u', 10, $ctx->organizationId(), null, null, microtime(true) + 5);
+            self::fail('Expected no_time');
+        } catch (AiException $e) {
+            self::assertSame('no_time', $e->reason);
+        }
         self::assertSame([], $this->transport->requests);
     }
 

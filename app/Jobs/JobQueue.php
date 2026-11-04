@@ -87,6 +87,15 @@ final class JobQueue
         );
     }
 
+    /** @param array<string, mixed> $progress */
+    public function saveProgress(int $id, array $progress): void
+    {
+        $this->db->execute(
+            'UPDATE jobs SET progress = ?, updated_at = ? WHERE id = ?',
+            [json_encode($progress, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR), gmdate('Y-m-d H:i:s'), $id],
+        );
+    }
+
     /** Retries with exponential backoff until max_attempts, then marks the job failed. */
     public function fail(int $id, string $error): void
     {

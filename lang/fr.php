@@ -385,7 +385,7 @@ return [
     'ai.job.title' => 'Génération en cours',
     'ai.job.generating' => 'L\'IA prépare votre questionnaire…',
     'ai.job.revising' => 'L\'IA modifie votre questionnaire…',
-    'ai.job.wait' => 'Cela prend généralement 20 à 60 secondes. Vous pouvez quitter cette page : le travail continue.',
+    'ai.job.wait' => 'Cela prend généralement 1 à 3 minutes. Vous pouvez quitter cette page : le travail continue.',
     'ai.step.pending' => 'En file d\'attente…',
     'ai.step.plan' => 'Étape 1/3 : plan des sections',
     'ai.step.form' => 'Étape 2/3 : rédaction des questions',
@@ -448,4 +448,11 @@ return [
     'bridge.error.too_many_rows' => 'Fichier trop long (plus de 5 000 lignes).',
     'bridge.error.server' => 'Le serveur ne peut pas lire ce type de fichier (extensions PHP zip/xmlreader manquantes).',
     'limit.ai_credits_left' => 'Crédits IA restants',
+
+    // v0.4.2 — AI job diagnostics
+    'ai.job.waiting_cron' => 'Étape longue : elle est confiée à la tâche planifiée (CRON), qui la lance dans la minute.',
+    'ai.job.no_cron' => 'La tâche planifiée (CRON) ne semble pas tourner sur ce serveur : la génération ne peut pas avancer. Vérifiez dans cPanel → Tâches Cron la commande « php …/bin/worker-dispatch.php » (chaque minute), ou appelez l\'URL /cron/VOTRE_JETON.',
+    'ai.job.retrying' => 'Tentative :attempt sur :max après un incident : :error',
+    'ai.error.auth' => 'Clé API Mammouth refusée : vérifiez MAMMOUTH_API_KEY dans le fichier .env. Aucun crédit décompté.',
+    'ai.error.bad_request' => 'Le service IA a refusé la demande (modèle inconnu ou paramètre invalide) : vérifiez les modèles AI_MODEL_* du fichier .env. Aucun crédit décompté.',
 ];

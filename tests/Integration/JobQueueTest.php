@@ -83,6 +83,27 @@ final class JobQueueTest extends DatabaseTestCase
         self::assertSame(['pong' => true, 'steps' => 3], array_intersect_key(json_decode((string) $queue->find($id)['result'], true), ['pong' => 1, 'steps' => 1]));
     }
 
+    public function testJobsKilledByTheHostAreReleasedSoonEvenWithAnOldEnvSetting(): void
+    {
+        $db = $this->db();
+        $_ENV['JOBS_STALE_AFTER'] = '600'; // written in .env by the installer before v0.4.2
+        $this->app = \App\Core\App::boot($this->app->root, false);
+        $this->app->setDatabase($db);
+        unset($_ENV['JOBS_STALE_AFTER']);
+        $queue = new JobQueue($this->db());
+        $id = $queue->push('system.ping');
+        $queue->reserve('killed');
+        $this->db()->execute('UPDATE jobs SET reserved_at = ? WHERE id = ?', [gmdate('Y-m-d H:i:s', time() - 200), $id]);
+
+        self::assertSame('done', (new Dispatcher($this->app))->runOne($id, 5), 'Released after 180 s (AI timeout + 60) despite JOBS_STALE_AFTER=600, then run');
+    }
+
+    public function testCronHeartbeat(): void
+    {
+        (new Dispatcher($this->app))->run(3);
+        self::assertLessThanOrEqual(2, Dispatcher::heartbeatAge($this->app));
+    }
+
     public function testUnknownJobTypeFails(): void
     {
         $queue = new JobQueue($this->db());

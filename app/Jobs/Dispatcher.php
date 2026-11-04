@@ -34,7 +34,8 @@ final class Dispatcher
             return $stats;
         }
         try {
-            $this->queue->releaseStale($this->app->config()->int('jobs.stale_after_seconds', 600));
+            self::touchHeartbeat($this->app);
+            $this->queue->releaseStale($this->staleAfter());
             $deadline = microtime(true) + $budgetSeconds;
             $workerId = gethostname() . ':' . getmypid();
             while (microtime(true) < $deadline - 2) {
@@ -53,9 +54,45 @@ final class Dispatcher
         return $stats;
     }
 
+    /**
+     * A step never legitimately lasts longer than one AI call plus a margin, so a job still
+     * "running" after that was killed by the host. Capped even if JOBS_STALE_AFTER is higher
+     * (installs before v0.4.2 wrote 600 s in .env).
+     */
+    private function staleAfter(): int
+    {
+        $configured = $this->app->config()->int('jobs.stale_after_seconds', 300);
+        $longestStep = $this->app->config()->int('ai.timeout_seconds', 120) + 60;
+
+        return max(60, min($configured, $longestStep));
+    }
+
+    /** Records that a dispatcher (CRON or HTTP cron) ran: lets the UI tell whether the CRON works. */
+    public static function touchHeartbeat(\App\Core\App $app): void
+    {
+        $dir = $app->storagePath('cache');
+        if (!is_dir($dir)) {
+            @mkdir($dir, 0o750, true);
+        }
+        @file_put_contents($dir . '/cron.last', (string) time(), LOCK_EX);
+    }
+
+    /** Seconds since the last dispatcher run, or null if it never ran. */
+    public static function heartbeatAge(\App\Core\App $app): ?int
+    {
+        $file = $app->storagePath('cache') . '/cron.last';
+        if (!is_file($file)) {
+            return null;
+        }
+
+        return max(0, time() - (int) file_get_contents($file));
+    }
+
     /** Runs one specific pending job now (bounded by the request time limit). */
     public function runOne(int $jobId, int $budgetSeconds): ?string
     {
+        // Jobs killed by the host (time limit) must not wait for the CRON to be released.
+        $this->queue->releaseStale($this->staleAfter());
         $job = $this->queue->reserve('web:' . getmypid(), 'php', $jobId);
 
         return $job === null ? null : $this->execute($job, microtime(true) + $budgetSeconds);

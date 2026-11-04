@@ -31,9 +31,10 @@ final class CurlTransport implements HttpTransport
         $response = curl_exec($ch);
         $status = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
         $error = curl_error($ch);
+        $errno = curl_errno($ch);
         curl_close($ch);
         if ($response === false || !is_string($response)) {
-            throw new AiException('network', 'AI API unreachable: ' . $error);
+            throw new AiException($errno === CURLE_OPERATION_TIMEDOUT ? 'timeout' : 'network', 'AI API ' . ($errno === CURLE_OPERATION_TIMEDOUT ? 'timeout after ' . $timeoutSeconds . ' s' : 'unreachable: ' . $error));
         }
 
         return ['status' => $status, 'body' => $response];

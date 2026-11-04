@@ -8,17 +8,27 @@ use App\Core\Env;
 return [
     'base_url' => Env::get('MAMMOUTH_BASE_URL', 'https://api.mammouth.ai/v1'),
     'api_key' => Env::get('MAMMOUTH_API_KEY', ''),
-    'timeout_seconds' => Env::int('AI_TIMEOUT_SECONDS', 25),
+    // Max duration of one API call. In the CRON (CLI, no PHP time limit) long steps use it fully;
+    // from a web request the call is capped by max_execution_time.
+    'timeout_seconds' => Env::int('AI_TIMEOUT_SECONDS', 120),
+    // Minimum time a web request must have left to attempt a step itself; otherwise the CRON does it.
+    'step_seconds' => [
+        'form_plan' => 25,
+        'form_generation' => 90,
+        'form_revision' => 90,
+        'form_repair' => 90,
+    ],
     'daily_budget_usd_per_org' => (float) Env::get('AI_DAILY_BUDGET_USD_PER_ORG', '0.50'),
     // Model IDs as listed on https://model-explorer.mammouth.ai/ (checked 2026-11-04).
     // Each "<usage>_fallback" comes from another provider, used when the first one fails.
     'models' => [
-        'form' => Env::get('AI_MODEL_FORM', 'gpt-6-luna'),
-        'form_fallback' => Env::get('AI_MODEL_FORM_FALLBACK', 'claude-haiku-5-5'),
-        'analysis_plan' => Env::get('AI_MODEL_ANALYSIS_PLAN', 'deepseek-v4.1-flash'),
-        'analysis_plan_fallback' => Env::get('AI_MODEL_ANALYSIS_PLAN_FALLBACK', 'glm-5.3-flash'),
-        'report' => Env::get('AI_MODEL_REPORT', 'gpt-6-luna'),
-        'report_fallback' => Env::get('AI_MODEL_REPORT_FALLBACK', 'claude-haiku-5-5'),
+        // Simple tasks: claude-haiku-5-5 (project owner's preference), gpt-6-luna as fallback.
+        'form' => Env::get('AI_MODEL_FORM', 'claude-haiku-5-5'),
+        'form_fallback' => Env::get('AI_MODEL_FORM_FALLBACK', 'gpt-6-luna'),
+        'analysis_plan' => Env::get('AI_MODEL_ANALYSIS_PLAN', 'claude-haiku-5-5'),
+        'analysis_plan_fallback' => Env::get('AI_MODEL_ANALYSIS_PLAN_FALLBACK', 'gpt-6-luna'),
+        'report' => Env::get('AI_MODEL_REPORT', 'claude-haiku-5-5'),
+        'report_fallback' => Env::get('AI_MODEL_REPORT_FALLBACK', 'gpt-6-luna'),
         'report_premium' => Env::get('AI_MODEL_REPORT_PREMIUM', 'claude-sonnet-5-5'),
         'report_premium_fallback' => Env::get('AI_MODEL_REPORT_PREMIUM_FALLBACK', 'gpt-6.1-sol'),
         'embeddings' => Env::get('AI_MODEL_EMBEDDINGS', 'text-embedding-3-small'),

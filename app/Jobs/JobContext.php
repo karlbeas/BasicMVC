@@ -19,6 +19,7 @@ final class JobContext
         public readonly array $payload,
         public readonly ?array $progress,
         private readonly float $deadline,
+        private readonly ?bool $longRun = null, // tests: force web (false) or CRON (true) behaviour
     ) {}
 
     public function organizationId(): ?int
@@ -29,6 +30,31 @@ final class JobContext
     public function secondsLeft(): float
     {
         return $this->deadline - microtime(true);
+    }
+
+    public function deadline(): float
+    {
+        return $this->deadline;
+    }
+
+    /**
+     * True when PHP imposes no time limit (CLI: CRON dispatcher). A step may then
+     * outlast the dispatcher budget, which only stops it from starting new jobs.
+     * Web requests (max_execution_time ~30 s on shared hosting) return false.
+     */
+    public function canRunLong(): bool
+    {
+        return $this->longRun ?? (PHP_SAPI === 'cli' && (int) ini_get('max_execution_time') === 0);
+    }
+
+    /**
+     * Persists progress now, so a retry after a failure resumes from here.
+     *
+     * @param array<string, mixed> $progress
+     */
+    public function checkpoint(array $progress): void
+    {
+        (new JobQueue($this->app->db()))->saveProgress((int) $this->job['id'], $progress);
     }
 
     public function shouldYield(float $marginSeconds = 5.0): bool

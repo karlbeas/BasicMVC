@@ -385,7 +385,7 @@ return [
     'ai.job.title' => 'Generating',
     'ai.job.generating' => 'The AI is preparing your questionnaire…',
     'ai.job.revising' => 'The AI is editing your questionnaire…',
-    'ai.job.wait' => 'This usually takes 20 to 60 seconds. You can leave this page: the work continues.',
+    'ai.job.wait' => 'This usually takes 1 to 3 minutes. You can leave this page: the work continues.',
     'ai.step.pending' => 'Queued…',
     'ai.step.plan' => 'Step 1/3: section plan',
     'ai.step.form' => 'Step 2/3: writing the questions',
@@ -448,4 +448,11 @@ return [
     'bridge.error.too_many_rows' => 'File too long (more than 5,000 rows).',
     'bridge.error.server' => 'The server cannot read this file type (PHP zip/xmlreader extensions missing).',
     'limit.ai_credits_left' => 'AI credits left',
+
+    // v0.4.2 — AI job diagnostics
+    'ai.job.waiting_cron' => 'Long step: handed over to the scheduled task (CRON), which starts it within a minute.',
+    'ai.job.no_cron' => 'The scheduled task (CRON) does not seem to run on this server: generation cannot progress. Check in cPanel → Cron Jobs the "php …/bin/worker-dispatch.php" command (every minute), or call the /cron/YOUR_TOKEN URL.',
+    'ai.job.retrying' => 'Attempt :attempt of :max after an incident: :error',
+    'ai.error.auth' => 'Mammouth API key refused: check MAMMOUTH_API_KEY in the .env file. No credit charged.',
+    'ai.error.bad_request' => 'The AI service rejected the request (unknown model or invalid parameter): check the AI_MODEL_* models in the .env file. No credit charged.',
 ];

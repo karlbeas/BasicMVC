@@ -27,17 +27,24 @@ final class AiGateway
         return $this->config->string('ai.api_key') !== '';
     }
 
+    /** Max duration of one API call (generation of a long questionnaire can take more than a minute). */
     public function timeout(): int
     {
-        return max(5, $this->config->int('ai.timeout_seconds', 25));
+        return max(5, $this->config->int('ai.timeout_seconds', 120));
     }
 
     /**
+     * Error reasons:
+     *  - definitive (no retry): not_configured, budget, auth (key refused), bad_request (e.g. unknown model)
+     *  - temporary (the queue retries): timeout, network, rate_limit, http (5xx)
+     *  - no_time: the deadline cannot fit a call (the job should yield)
+     *
      * @param string $modelKey key in config ai.models ("form", "report"…); "<key>_fallback" is tried on failure
+     * @param float|null $deadline microtime limit for this request (web), null = no PHP time limit (CLI)
      *
      * @throws AiException
      */
-    public function complete(string $operation, string $modelKey, string $system, string $user, int $maxTokens, int $organizationId, ?int $userId = null, ?int $jobId = null): AiResponse
+    public function complete(string $operation, string $modelKey, string $system, string $user, int $maxTokens, int $organizationId, ?int $userId = null, ?int $jobId = null, ?float $deadline = null): AiResponse
     {
         if (!$this->isConfigured()) {
             throw new AiException('not_configured', 'MAMMOUTH_API_KEY is not set');
@@ -50,14 +57,22 @@ final class AiGateway
         if ($models === []) {
             throw new AiException('not_configured', 'No model configured for ' . $modelKey);
         }
-        $last = new AiException('http', 'AI call failed');
+        $last = new AiException('no_time', 'Not enough time left for an AI call');
         foreach ($models as $model) {
+            $timeout = $this->timeout();
+            if ($deadline !== null) {
+                $left = (int) floor($deadline - microtime(true) - 2);
+                if ($left < 10) {
+                    throw $last;
+                }
+                $timeout = min($timeout, $left);
+            }
             try {
-                return $this->call($operation, $model, $system, $user, $maxTokens, $organizationId, $userId, $jobId);
+                return $this->call($operation, $model, $system, $user, $maxTokens, $organizationId, $userId, $jobId, $timeout);
             } catch (AiException $e) {
                 $last = $e;
-                if ($e->reason === 'budget') {
-                    throw $e;
+                if (in_array($e->reason, ['budget', 'auth'], true)) {
+                    throw $e; // same key / same budget for every model: no point trying the fallback
                 }
             }
         }
@@ -95,7 +110,7 @@ final class AiGateway
         }
     }
 
-    private function call(string $operation, string $model, string $system, string $user, int $maxTokens, int $organizationId, ?int $userId, ?int $jobId): AiResponse
+    private function call(string $operation, string $model, string $system, string $user, int $maxTokens, int $organizationId, ?int $userId, ?int $jobId, int $timeout): AiResponse
     {
         $url = rtrim($this->config->string('ai.base_url', 'https://api.mammouth.ai/v1'), '/') . '/chat/completions';
         $body = json_encode([
@@ -106,7 +121,7 @@ final class AiGateway
         ], JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
         $started = microtime(true);
         try {
-            $response = $this->transport->postJson($url, ['Authorization' => 'Bearer ' . $this->config->string('ai.api_key')], $body, $this->timeout());
+            $response = $this->transport->postJson($url, ['Authorization' => 'Bearer ' . $this->config->string('ai.api_key')], $body, $timeout);
         } catch (AiException $e) {
             $this->log($organizationId, $userId, $jobId, $operation, $model, 0, 0, 0, false, $started);
             throw $e;
@@ -115,7 +130,13 @@ final class AiGateway
         if ($response['status'] < 200 || $response['status'] >= 300 || !is_array($data)) {
             $this->log($organizationId, $userId, $jobId, $operation, $model, 0, 0, 0, false, $started);
             $detail = is_array($data) && is_array($data['error'] ?? null) ? (string) ($data['error']['message'] ?? '') : '';
-            throw new AiException('http', 'AI API HTTP ' . $response['status'] . ($detail !== '' ? ': ' . mb_substr($detail, 0, 200) : ''));
+            $reason = match (true) {
+                in_array($response['status'], [401, 403], true) => 'auth',
+                in_array($response['status'], [400, 404, 422], true) => 'bad_request',
+                $response['status'] === 429 => 'rate_limit',
+                default => 'http',
+            };
+            throw new AiException($reason, $model . ' : HTTP ' . $response['status'] . ($detail !== '' ? ' — ' . mb_substr($detail, 0, 200) : ''));
         }
         $content = $data['choices'][0]['message']['content'] ?? null;
         $promptTokens = (int) ($data['usage']['prompt_tokens'] ?? 0);

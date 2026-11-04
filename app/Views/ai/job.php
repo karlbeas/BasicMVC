@@ -12,6 +12,7 @@ $title = t('ai.job.title');
                 <h1 class="h4"><?= e(t($mode === 'revise' ? 'ai.job.revising' : 'ai.job.generating')) ?></h1>
                 <p class="text-muted mb-1" data-step aria-live="polite"><?= e(t('ai.step.pending')) ?></p>
                 <p class="small text-muted"><?= e(t('ai.job.wait')) ?></p>
+                <div class="alert alert-warning small d-none text-start" data-notice role="status"></div>
                 <div class="alert alert-danger d-none text-start" data-error role="alert"></div>
                 <a class="btn btn-outline-secondary d-none" data-back href="<?= e(url('projects')) ?>"><?= e(t('nav.projects')) ?></a>
             </div>
