@@ -17,6 +17,9 @@ git -C "$ROOT" archive --format=tar HEAD | tar -x -C "$STAGE"
 composer install --working-dir="$STAGE" --no-dev --optimize-autoloader --classmap-authoritative \
     --no-interaction --no-progress --prefer-dist
 
+# Dependencies' own tests/docs are useless on the server (present when installed from source).
+find "$STAGE/vendor" -mindepth 3 -maxdepth 3 -type d \( -name tests -o -name Tests -o -name docs \) -prune -exec rm -rf {} +
+
 mkdir -p "$STAGE/storage/logs" "$STAGE/storage/cache" "$STAGE/storage/sessions" "$STAGE/storage/uploads"
 echo "$VERSION" > "$STAGE/VERSION"
 
