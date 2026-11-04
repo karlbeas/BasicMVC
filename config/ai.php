@@ -13,7 +13,7 @@ return [
     'timeout_seconds' => Env::int('AI_TIMEOUT_SECONDS', 120),
     // Minimum time a web request must have left to attempt a step itself; otherwise the CRON does it.
     'step_seconds' => [
-        'form_plan' => 25,
+        'form_plan' => 20,
         'form_generation' => 90,
         'form_revision' => 90,
         'form_repair' => 90,
