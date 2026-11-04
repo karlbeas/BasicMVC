@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Shared hosts run either engine: test both.
+        db: ['mysql:8.0', 'mariadb:10.6']
+    services:
+      db:
+        image: ${{ matrix.db }}
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: f2s_test
+          MYSQL_USER: f2s
+          MYSQL_PASSWORD: f2s
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: f2s_test
+          MARIADB_USER: f2s
+          MARIADB_PASSWORD: f2s
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -proot || mariadb-admin ping -h 127.0.0.1 -proot"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pdo_mysql, mbstring, intl, fileinfo
+          coverage: none
+      - run: composer validate --strict
+      - run: composer install --no-interaction --no-progress --prefer-dist
+      - run: composer lint
+      - run: composer test
+        env:
+          TEST_DB_HOST: 127.0.0.1
+          TEST_DB_DATABASE: f2s_test
+          TEST_DB_USERNAME: f2s
+          TEST_DB_PASSWORD: f2s
+
+  release:
+    needs: test
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          coverage: none
+      - run: bash bin/build-release.sh "${GITHUB_SHA::8}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: f2s-pro-release
+          path: build/*.zip
+          retention-days: 14
