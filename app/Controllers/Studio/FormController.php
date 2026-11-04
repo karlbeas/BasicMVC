@@ -56,6 +56,58 @@ final class FormController extends Controller
         return $this->redirect('/forms/' . ($form['public_id'] ?? ''));
     }
 
+    /** Creates an empty form (one starter question) and opens the visual editor. */
+    public function storeBlank(Request $request): Response
+    {
+        $ctx = $this->authorize('form.create');
+        $project = $this->project($ctx->organizationId(), $request);
+        $title = mb_substr($request->string('title'), 0, 200);
+        if ($title === '') {
+            $this->flash('danger', t('forms.title_required'));
+
+            return $this->redirect('/projects/' . $project['public_id']);
+        }
+        $lang = $this->app->lang()->locale();
+        $key = trim((string) preg_replace('/[^a-z0-9]+/', '_', strtolower((string) iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $title))), '_');
+        $key = preg_match('/^[a-z_]/', $key) ? $key : 'form_' . $key;
+        $schema = [
+            'schema_version' => '1.0',
+            'settings' => ['form_id' => substr($key !== 'form_' ? $key : 'form', 0, 60), 'title' => [$lang => $title], 'sampling' => 'unknown'],
+            'languages' => [$lang],
+            'default_language' => $lang,
+            'choice_lists' => new \stdClass(),
+            'items' => [[
+                'kind' => 'question', 'type' => 'text', 'name' => 'question_1',
+                'label' => [$lang => t('editor.starter_question')],
+            ]],
+        ];
+        $ids = $this->service()->createFromJson($ctx, (int) $project['id'], (string) json_encode($schema, JSON_UNESCAPED_UNICODE), 'editor');
+        $form = $this->app->db()->fetchOne('SELECT public_id FROM forms WHERE id = ? AND organization_id = ?', [$ids['form_id'], $ctx->organizationId()]);
+
+        return $this->redirect('/forms/' . ($form['public_id'] ?? '') . '/edit');
+    }
+
+    /** Visual editor of the current draft. */
+    public function edit(Request $request): Response
+    {
+        $ctx = $this->authorize('form.edit');
+        $repo = new FormRepository($this->app->db());
+        $form = $this->form($ctx->organizationId(), $request);
+        $current = $form['current_version_id'] !== null ? $repo->findVersion($ctx->organizationId(), (int) $form['current_version_id']) : null;
+        if ($current === null || $current['status'] !== 'draft') {
+            $this->flash('warning', t('forms.immutable'));
+
+            return $this->redirect('/forms/' . $form['public_id']);
+        }
+
+        return $this->view('forms/editor', [
+            'form' => $form,
+            'version' => $current,
+            'schemaJson' => (string) json_encode(json_decode((string) $current['schema_json']), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+            'scripts' => ['js/f2s-editor.js'],
+        ]);
+    }
+
     public function show(Request $request): Response
     {
         $ctx = $this->authorize('project.view');
@@ -75,6 +127,8 @@ final class FormController extends Controller
             'canEdit' => $ctx->can('form.edit'),
             'canPublish' => $ctx->can('form.publish'),
             'result' => null,
+            'campaigns' => (new \App\Models\CampaignRepository($this->app->db()))->forForm($ctx->organizationId(), (int) $form['id']),
+            'publishedVersions' => array_values(array_filter($versions, static fn(array $v): bool => $v['status'] === 'published')),
         ]);
     }
 
@@ -98,7 +152,7 @@ final class FormController extends Controller
             $this->flash('danger', t('forms.immutable'));
         }
 
-        return $this->redirect('/forms/' . $form['public_id']);
+        return $this->redirect('/forms/' . $form['public_id'] . ($request->string('return') === 'edit' ? '/edit' : ''));
     }
 
     public function publish(Request $request): Response

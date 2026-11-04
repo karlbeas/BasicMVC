@@ -14,7 +14,14 @@ $title = (string) $project['name'];
         <?php if (!empty($project['description'])): ?><p class="text-muted mb-0"><?= e($project['description']) ?></p><?php endif; ?>
     </div>
     <?php if ($auth->can('form.create')): ?>
-        <a class="btn btn-f2s" href="<?= e(url('projects/' . $project['public_id'] . '/forms/new')) ?>"><?= e(t('forms.new')) ?></a>
+        <div class="d-flex gap-2 flex-wrap">
+            <form method="post" action="<?= e(url('projects/' . $project['public_id'] . '/forms/blank')) ?>" class="d-flex gap-2">
+                <?= csrf_field() ?>
+                <input class="form-control" name="title" maxlength="200" required placeholder="<?= e(t('forms.blank_placeholder')) ?>" aria-label="<?= e(t('forms.blank_placeholder')) ?>">
+                <button class="btn btn-f2s text-nowrap"><?= e(t('forms.blank_create')) ?></button>
+            </form>
+            <a class="btn btn-outline-secondary text-nowrap" href="<?= e(url('projects/' . $project['public_id'] . '/forms/new')) ?>"><?= e(t('forms.import_json')) ?></a>
+        </div>
     <?php endif; ?>
 </div>
 <div class="card shadow-sm">

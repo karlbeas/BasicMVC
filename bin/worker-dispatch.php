@@ -19,5 +19,8 @@ if (isset($argv[1]) && ctype_digit($argv[1])) {
 }
 @set_time_limit($budget + 15);
 
+// After an update (zip extracted over the install), apply new migrations first.
+$migrated = $app->schemaUpgrader()->upgrade();
+
 $stats = (new Dispatcher($app))->run($budget);
-echo json_encode($stats) . PHP_EOL;
+echo json_encode(['migrations_applied' => $migrated] + $stats) . PHP_EOL;

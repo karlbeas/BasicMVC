@@ -11,7 +11,7 @@ abstract class Controller
     public function __construct(protected App $app) {}
 
     /** @param array<string, mixed> $data */
-    protected function view(string $template, array $data = [], int $status = 200): Response
+    protected function view(string $template, array $data = [], int $status = 200, ?string $layout = 'layouts/main'): Response
     {
         $data += [
             'auth' => $this->app->auth()->current(),
@@ -19,7 +19,7 @@ abstract class Controller
             'locale' => $this->app->lang()->locale(),
         ];
 
-        return Response::html($this->app->view()->render($template, $data), $status);
+        return Response::html($this->app->view()->render($template, $data, $layout), $status);
     }
 
     /** @param array<mixed> $data */

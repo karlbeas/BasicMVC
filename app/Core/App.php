@@ -6,6 +6,7 @@ namespace App\Core;
 
 use App\Services\AuditLogger;
 use App\Services\AuthService;
+use App\Services\SchemaUpgrader;
 
 /**
  * Application kernel: configuration, lazy services, routing and error handling.
@@ -114,6 +115,11 @@ final class App
         return $this->auth ??= new AuthService($this->db(), $this->session(), new AuditLogger($this->db()));
     }
 
+    public function schemaUpgrader(): SchemaUpgrader
+    {
+        return new SchemaUpgrader($this->db(), $this->root . '/database/migrations', $this->storagePath('cache'));
+    }
+
     public function logger(): Logger
     {
         return $this->logger ??= new Logger($this->storagePath('logs'));
@@ -159,6 +165,21 @@ final class App
     }
 
     /**
+     * Absolute URL for links shared outside the app (campaign link, QR code):
+     * APP_URL when configured, otherwise scheme + Host of the current request.
+     */
+    public function absoluteUrl(string $path, Request $request): string
+    {
+        $url = $this->url($path);
+        if (preg_match('#^https?://#', $url)) {
+            return $url;
+        }
+        $host = preg_replace('/[^A-Za-z0-9.:\[\]-]/', '', (string) $request->header('Host'));
+
+        return ($request->isSecure() ? 'https' : 'http') . '://' . ($host !== '' ? $host : 'localhost') . $url;
+    }
+
+    /**
      * Base path detection for shared hosting: the app may be served from the
      * domain root, a sub-folder, or through the root .htaccess fallback that
      * rewrites everything into public/ (SCRIPT_NAME then ends with /public/index.php
@@ -190,6 +211,11 @@ final class App
             if (!is_file($this->root . '/.env') && Env::get('DB_DATABASE', '') === '' && !str_starts_with($request->path, '/install')
                 && !str_starts_with($request->path, '/assets/')) {
                 return $this->withSecurityHeaders(Response::redirect($this->url('install')));
+            }
+            // After an update, until the CRON applies the new migrations: maintenance page.
+            if (is_file($this->root . '/.env') && !str_starts_with($request->path, '/cron/') && !str_starts_with($request->path, '/assets/')
+                && !$this->schemaUpgrader()->upToDateMarker() && !$this->schemaUpgrader()->isUpToDate()) {
+                return $this->withSecurityHeaders($this->errorResponse($request, 503)->withHeader('Retry-After', '60'));
             }
             $route = $this->router()->match($request->method, $request->path);
             $request->params = $route['params'];
@@ -235,7 +261,7 @@ final class App
 
     public function errorResponse(Request $request, int $status, ?string $detail = null): Response
     {
-        $key = in_array($status, [401, 403, 404, 405, 419, 429], true) ? 'error.' . $status : 'error.500';
+        $key = in_array($status, [401, 403, 404, 405, 419, 429, 503], true) ? 'error.' . $status : 'error.500';
         if ($request->wantsJson()) {
             return Response::json(['error' => ['status' => $status, 'message' => $this->lang()->get($key)]], $status);
         }

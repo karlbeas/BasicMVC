@@ -9,6 +9,7 @@
         "ext-mbstring": "*",
         "ext-pdo": "*",
         "ext-pdo_mysql": "*",
+        "chillerlan/php-qrcode": "^5.0",
         "opis/json-schema": "^2.3"
     },
     "require-dev": {

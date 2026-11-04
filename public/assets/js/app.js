@@ -62,6 +62,17 @@
         });
     });
 
+    // Copy a value to the clipboard (campaign link).
+    $(document).on('click', '[data-copy]', function () {
+        var $btn = $(this), $input = $($btn.data('copy'));
+        var done = function () { var old = $btn.text(); $btn.text($btn.data('copied')); setTimeout(function () { $btn.text(old); }, 1500); };
+        if (navigator.clipboard && window.isSecureContext) {
+            navigator.clipboard.writeText($input.val()).then(done);
+        } else {
+            $input.trigger('select'); document.execCommand('copy'); done();
+        }
+    });
+
     // Confirmation for irreversible actions (publish).
     $(document).on('submit', 'form[data-confirm]', function (e) {
         if (!window.confirm($(this).data('confirm'))) { e.preventDefault(); }

@@ -68,6 +68,12 @@ final class Request
         return is_scalar($value) ? trim((string) $value) : $default;
     }
 
+    /** @return array<string, mixed> all POST fields (form submissions) */
+    public function post(): array
+    {
+        return $this->post;
+    }
+
     public function query(string $key, mixed $default = null): mixed
     {
         return $this->query[$key] ?? $default;

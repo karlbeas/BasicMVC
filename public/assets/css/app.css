@@ -9,3 +9,18 @@
 .btn-f2s:hover, .btn-f2s:focus { background-color: var(--f2s-primary-dark); border-color: var(--f2s-primary-dark); color: #fff; }
 .schema-pre { max-height: 32rem; overflow: auto; white-space: pre; }
 details > summary { cursor: pointer; }
+
+/* Collect (public forms) */
+.f2s-form-col { max-width: 46rem; }
+.f2s-public .f2s-q .form-check-input { width: 1.25em; height: 1.25em; }
+.f2s-scale-btn { min-width: 2.75rem; }
+.f2s-hp { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
+.f2s-other[hidden] { display: none; }
+.f2s-cell { max-width: 14rem; }
+.f2s-qr { image-rendering: pixelated; }
+
+/* Visual editor */
+.f2s-item { border-left: 4px solid var(--f2s-primary); }
+.f2s-item.f2s-group-item { border-left-color: #6c757d; }
+.f2s-item .f2s-handle { cursor: default; }
+.f2s-children { border-left: 2px dashed #ced4da; padding-left: .75rem; margin-left: .25rem; }

@@ -42,8 +42,9 @@ final class SystemController extends Controller
         if ($maxExec > 0) {
             $budget = min($budget, max(5, $maxExec - 5));
         }
+        $migrated = $this->app->schemaUpgrader()->upgrade();
         $stats = (new Dispatcher($this->app))->run($budget);
 
-        return $this->json(['ok' => true] + $stats);
+        return $this->json(['ok' => true, 'migrations_applied' => $migrated] + $stats);
     }
 }

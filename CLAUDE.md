@@ -50,7 +50,9 @@ bash bin/build-release.sh [version]          # archive de déploiement (vendor/ 
 ## Où est quoi
 
 - `app/Core/` : noyau (App, Router, Request/Response, View, Database, Session, Csrf, Lang, Env, Migrator, Logger).
-- `app/Controllers/{Control,Studio,Api,System}/`, `app/Models/` (repositories), `app/Services/` (AuthService, PlanPolicy, FormValidator, FormSemanticChecker, FormService, AuditLogger…), `app/Jobs/` (JobQueue, Dispatcher, handlers), `app/Views/`.
+- `app/Controllers/{Control,Studio,Collect,Api,System}/`, `app/Models/` (repositories), `app/Services/` (AuthService, PlanPolicy, FormValidator, FormSemanticChecker, FormService, AuditLogger…), `app/Services/Collect/` (ExpressionEvaluator — jumeau JS `public/assets/js/f2s-expr.js` testé sur `tests/fixtures/expressions.json` —, SubmissionValidator, FormRenderer, CampaignService, SubmissionService, ResponseExporter), `app/Jobs/` (JobQueue, Dispatcher, handlers), `app/Views/`.
+- Éditeur visuel : `public/assets/js/f2s-editor.js` ; formulaire public : `/f/{token}` (`PublicFormController`, `public/assets/js/f2s-collect.js`).
+- Migrations : appliquées automatiquement par `bin/worker-dispatch.php` après une mise à jour (`SchemaUpgrader`) ; page 503 tant qu'elles sont en attente.
 - Routes : `config/routes.php` (table explicite ; middleware `auth`, `guest`, `nocsrf`).
 - Schéma de formulaire : `docs/schema/f2s-schema.v1.json` (lu à l'exécution, livré dans la release) + exemples dans `docs/schema/examples/`.
 - Déploiement : `docs/deployment/shared-hosting.md`.

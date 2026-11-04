@@ -72,5 +72,8 @@ $pageTitle = isset($title) && is_string($title) ? $title . ' — F2S Pro' : 'F2S
 <script src="<?= e(asset('vendor/jquery.min.js')) ?>"></script>
 <script src="<?= e(asset('vendor/bootstrap.bundle.min.js')) ?>"></script>
 <script src="<?= e(asset('js/app.js')) ?>"></script>
+<?php foreach (isset($scripts) && is_array($scripts) ? $scripts : [] as $script): ?>
+<script src="<?= e(asset((string) $script)) ?>"></script>
+<?php endforeach; ?>
 </body>
 </html>

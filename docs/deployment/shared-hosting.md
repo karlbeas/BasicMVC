@@ -73,8 +73,8 @@ Vérification : `/health` doit répondre `{"status":"ok","db":"ok"}`.
 
 1. Récupérer la nouvelle archive.
 2. Sauvegarder la base (phpMyAdmin → Exporter) et `.env`.
-3. Extraire l'archive par-dessus l'installation existante **sans écraser `.env` ni `storage/`** (le zip ne contient pas de `.env` ; supprimer `storage/install.key` s'il réapparaît).
-4. Lancer les migrations (section 5).
+3. Extraire l'archive par-dessus l'installation existante (le zip ne contient pas de `.env` : la configuration est conservée). Supprimer `storage/install.key` s'il réapparaît (sans effet une fois installé, mais inutile).
+4. **Rien d'autre à faire** : à son passage suivant (≤ 1 minute), la tâche CRON applique automatiquement les nouvelles migrations. Entre-temps, le site affiche « Mise à jour en cours ». Sans CRON, appeler une fois l'URL `/cron/VOTRE_JETON`.
 5. Contrôler `/health` et la page d'accueil.
 
 ## 8. Sécurité — liste de contrôle

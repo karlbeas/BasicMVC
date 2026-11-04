@@ -7,6 +7,8 @@
 /** @var string $schemaPretty */
 /** @var bool $canEdit */
 /** @var bool $canPublish */
+/** @var list<array<string, mixed>> $campaigns */
+/** @var list<array<string, mixed>> $publishedVersions */
 $title = (string) $form['title'];
 $isDraft = $current !== null && $current['status'] === 'draft';
 $base = 'forms/' . $form['public_id'];
@@ -30,6 +32,9 @@ $base = 'forms/' . $form['public_id'];
                 v<?= e($current['version_number']) ?> · <?= e(t('status.' . (string) $current['status'])) ?>
             </span>
             <a class="btn btn-outline-secondary" href="<?= e(url($base . '/versions/' . $current['public_id'] . '/json')) ?>"><?= e(t('forms.export_json')) ?></a>
+            <?php if ($isDraft && $canEdit): ?>
+                <a class="btn btn-primary" href="<?= e(url($base . '/edit')) ?>"><?= e(t('editor.open')) ?></a>
+            <?php endif; ?>
             <?php if ($isDraft && $canPublish): ?>
                 <form method="post" action="<?= e(url($base . '/versions/' . $current['public_id'] . '/publish')) ?>" data-confirm="<?= e(t('forms.publish_confirm')) ?>">
                     <?= csrf_field() ?><button class="btn btn-success"><?= e(t('forms.publish')) ?></button>
@@ -46,6 +51,57 @@ $base = 'forms/' . $form['public_id'];
 <?php if ($current !== null && !$isDraft): ?>
     <div class="alert alert-info small"><?= e(t('forms.immutable_notice')) ?></div>
 <?php endif; ?>
+
+<div class="card shadow-sm mb-4">
+    <div class="card-header"><?= e(t('campaigns.title')) ?></div>
+    <div class="card-body">
+        <?php if ($campaigns === []): ?>
+            <p class="text-muted small"><?= e(t('campaigns.none')) ?></p>
+        <?php else: ?>
+            <div class="list-group mb-3">
+                <?php foreach ($campaigns as $c): ?>
+                    <a class="list-group-item list-group-item-action d-flex justify-content-between align-items-center" href="<?= e(url('campaigns/' . $c['public_id'])) ?>">
+                        <span><?= e($c['title']) ?> <span class="small text-muted">· v<?= e($c['version_number']) ?></span></span>
+                        <span>
+                            <span class="badge text-bg-<?= $c['status'] === 'open' ? 'success' : 'secondary' ?>"><?= e(t('campaigns.status.' . (string) $c['status'])) ?></span>
+                            <span class="badge text-bg-light border"><?= e(t('campaigns.response_count', ['count' => (int) $c['response_count']])) ?></span>
+                        </span>
+                    </a>
+                <?php endforeach; ?>
+            </div>
+        <?php endif; ?>
+        <?php if ($canPublish && $publishedVersions !== []): ?>
+            <details<?= $campaigns === [] ? ' open' : '' ?>>
+                <summary class="fw-semibold mb-2"><?= e(t('campaigns.new')) ?></summary>
+                <form method="post" action="<?= e(url($base . '/versions/' . $publishedVersions[0]['public_id'] . '/campaigns')) ?>" class="row g-2 align-items-end">
+                    <?= csrf_field() ?>
+                    <div class="col-md-4">
+                        <label class="form-label small" for="c-title"><?= e(t('campaigns.field.title')) ?></label>
+                        <input class="form-control" id="c-title" name="title" maxlength="255" placeholder="<?= e($form['title']) ?>">
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small" for="c-closes"><?= e(t('campaigns.field.closes_at')) ?></label>
+                        <input class="form-control" type="date" id="c-closes" name="closes_at">
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small" for="c-limit"><?= e(t('campaigns.field.response_limit')) ?></label>
+                        <input class="form-control" type="number" min="1" id="c-limit" name="response_limit">
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small" for="c-code"><?= e(t('campaigns.field.access_code')) ?></label>
+                        <input class="form-control" id="c-code" name="access_code" maxlength="64" autocomplete="off">
+                    </div>
+                    <div class="col-md-2">
+                        <button class="btn btn-f2s w-100"><?= e(t('campaigns.open')) ?></button>
+                    </div>
+                    <div class="col-12 form-text"><?= e(t('campaigns.new_help', ['version' => (int) $publishedVersions[0]['version_number']])) ?></div>
+                </form>
+            </details>
+        <?php elseif ($publishedVersions === []): ?>
+            <p class="small text-muted mb-0"><?= e(t('campaigns.publish_first')) ?></p>
+        <?php endif; ?>
+    </div>
+</div>
 
 <div class="row g-4">
     <div class="col-lg-7">

@@ -1,0 +1,29 @@
+{
+  "schema_version": "1.0",
+  "settings": {"form_id": "collect_all_types", "title": {"fr": "Tous les types", "en": "All types"}, "sampling": "non_probabilistic"},
+  "languages": ["fr", "en"],
+  "default_language": "fr",
+  "choice_lists": {
+    "yes_no": [{"value": "yes", "label": {"fr": "Oui", "en": "Yes"}}, {"value": "no", "label": {"fr": "Non", "en": "No"}}],
+    "services": [{"value": "lab", "label": {"fr": "Laboratoire", "en": "Lab"}}, {"value": "pharmacy", "label": {"fr": "Pharmacie", "en": "Pharmacy"}}, {"value": "consult", "label": {"fr": "Consultation", "en": "Consultation"}}],
+    "agree": [{"value": "1", "label": {"fr": "Non", "en": "No"}}, {"value": "2", "label": {"fr": "Moyen", "en": "So-so"}}, {"value": "3", "label": {"fr": "Oui", "en": "Yes"}}]
+  },
+  "items": [
+    {"kind": "question", "type": "note", "name": "intro", "label": {"fr": "Bienvenue <b>!</b>", "en": "Welcome"}},
+    {"kind": "question", "type": "select_one", "name": "consent", "label": {"fr": "Acceptez-vous ?", "en": "Do you agree?"}, "choices": "yes_no", "required": true},
+    {"kind": "group", "name": "main", "label": {"fr": "Questionnaire", "en": "Questionnaire"}, "relevant": "${consent} = 'yes'", "items": [
+      {"kind": "question", "type": "text", "name": "city", "label": {"fr": "Ville", "en": "City"}, "required": true},
+      {"kind": "question", "type": "integer", "name": "age", "label": {"fr": "Âge", "en": "Age"}, "required": true, "constraint": ". >= 18 and . <= 120", "constraint_message": {"fr": "Entre 18 et 120 ans", "en": "Between 18 and 120"}},
+      {"kind": "question", "type": "decimal", "name": "spend", "label": {"fr": "Dépense", "en": "Spend"}},
+      {"kind": "question", "type": "date", "name": "visit", "label": {"fr": "Date de visite", "en": "Visit date"}},
+      {"kind": "question", "type": "select_multiple", "name": "used", "label": {"fr": "Services utilisés", "en": "Services used"}, "choices": "services", "allow_other": true, "required": true},
+      {"kind": "question", "type": "text", "name": "drug", "label": {"fr": "Quel médicament ?", "en": "Which drug?"}, "relevant": "selected(${used}, 'pharmacy')", "required": true},
+      {"kind": "question", "type": "scale", "name": "nps", "label": {"fr": "Recommandation", "en": "Recommendation"}, "scale": {"min": 0, "max": 10, "preset": "nps"}},
+      {"kind": "question", "type": "matrix", "name": "quality", "label": {"fr": "Qualité", "en": "Quality"}, "choices": "agree", "required": true,
+        "rows": [{"name": "q_staff", "label": {"fr": "Accueil", "en": "Staff"}}, {"name": "q_wait", "label": {"fr": "Attente", "en": "Wait"}}]},
+      {"kind": "question", "type": "email", "name": "email", "label": {"fr": "E-mail", "en": "Email"}, "analysis": {"role": "identifier", "personal_data": true}},
+      {"kind": "question", "type": "phone", "name": "phone", "label": {"fr": "Téléphone", "en": "Phone"}},
+      {"kind": "question", "type": "calculate", "name": "age_next", "label": {"fr": "Âge l'an prochain", "en": "Age next year"}, "calculation": "${age} + 1"}
+    ]}
+  ]
+}
