@@ -1,0 +1,57 @@
+{
+  "schema_version": "1.0",
+  "settings": {
+    "form_id": "minimal",
+    "title": {
+      "fr": "Minimal",
+      "en": "Minimal"
+    }
+  },
+  "languages": [
+    "fr",
+    "en"
+  ],
+  "default_language": "fr",
+  "choice_lists": {
+    "yes_no": [
+      {
+        "value": "yes",
+        "label": {
+          "fr": "Oui",
+          "en": "Yes"
+        }
+      },
+      {
+        "value": "no",
+        "label": {
+          "fr": "Non",
+          "en": "No"
+        }
+      }
+    ]
+  },
+  "items": [
+    {
+      "kind": "question",
+      "type": "select_one",
+      "name": "consent",
+      "label": {
+        "fr": "Acceptez-vous ?",
+        "en": "Do you agree?"
+      },
+      "choices": "yes_no",
+      "required": true
+    },
+    {
+      "kind": "question",
+      "type": "integer",
+      "name": "age",
+      "label": {
+        "fr": "Âge",
+        "en": "Age"
+      },
+      "relevant": "${consentement} = 'yes'",
+      "constraint": ". >= 18 and . <= 120"
+    }
+  ]
+}

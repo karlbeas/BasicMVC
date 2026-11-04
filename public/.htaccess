@@ -1,0 +1,32 @@
+# F2S Pro — web root (Apache / LiteSpeed, typical shared hosting)
+Options -Indexes -MultiViews
+DirectoryIndex index.php
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Force HTTPS (also behind a proxy/CDN sending X-Forwarded-Proto).
+    RewriteCond %{HTTPS} !=on
+    RewriteCond %{HTTP:X-Forwarded-Proto} !=https
+    RewriteCond %{HTTP_HOST} !^(localhost|127\.0\.0\.1)(:\d+)?$
+    RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+
+    # Never serve dotfiles (.env, .git…), except .well-known (Let's Encrypt).
+    RewriteRule (^|/)\.(?!well-known/) - [F,L]
+
+    # Front controller: everything that is not a real file goes to index.php.
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^ index.php [L]
+</IfModule>
+
+<FilesMatch "^f2s-path\.php$">
+    Require all denied
+</FilesMatch>
+
+<IfModule mod_headers.c>
+    Header always set X-Content-Type-Options "nosniff"
+    <FilesMatch "\.(css|js|woff2?|png|jpe?g|svg|ico)$">
+        Header set Cache-Control "public, max-age=604800"
+    </FilesMatch>
+</IfModule>

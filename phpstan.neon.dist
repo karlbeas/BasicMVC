@@ -1,0 +1,11 @@
+parameters:
+    level: 6
+    paths:
+        - app
+        - bin
+        - config
+        - public/index.php
+        - tests
+    excludePaths:
+        - app/Views/*
+    tmpDir: storage/cache/phpstan

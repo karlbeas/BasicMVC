@@ -1,0 +1,113 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Jobs;
+
+use App\Core\App;
+
+/**
+ * Runs queued jobs within a time budget. Called by CRON (bin/worker-dispatch.php),
+ * by the protected HTTP endpoint (hosts without CLI cron), or for a single job
+ * from a web request (runOne) so the user does not wait for the next CRON tick.
+ */
+final class Dispatcher
+{
+    private const LOCK = 'f2s_job_dispatcher';
+
+    private JobQueue $queue;
+
+    public function __construct(private App $app)
+    {
+        $this->queue = new JobQueue($app->db());
+    }
+
+    /** @return array{processed: int, done: int, yielded: int, failed: int, skipped: bool} */
+    public function run(int $budgetSeconds): array
+    {
+        $stats = ['processed' => 0, 'done' => 0, 'yielded' => 0, 'failed' => 0, 'skipped' => false];
+        $db = $this->app->db();
+        // One dispatcher at a time: overlapping CRON runs exit immediately.
+        if ((int) $db->fetchValue('SELECT GET_LOCK(?, 0)', [self::LOCK]) !== 1) {
+            $stats['skipped'] = true;
+
+            return $stats;
+        }
+        try {
+            $this->queue->releaseStale($this->app->config()->int('jobs.stale_after_seconds', 600));
+            $deadline = microtime(true) + $budgetSeconds;
+            $workerId = gethostname() . ':' . getmypid();
+            while (microtime(true) < $deadline - 2) {
+                $job = $this->queue->reserve($workerId);
+                if ($job === null) {
+                    break;
+                }
+                $outcome = $this->execute($job, $deadline);
+                ++$stats['processed'];
+                ++$stats[$outcome];
+            }
+        } finally {
+            $db->fetchValue('SELECT RELEASE_LOCK(?)', [self::LOCK]);
+        }
+
+        return $stats;
+    }
+
+    /** Runs one specific pending job now (bounded by the request time limit). */
+    public function runOne(int $jobId, int $budgetSeconds): ?string
+    {
+        $job = $this->queue->reserve('web:' . getmypid(), 'php', $jobId);
+
+        return $job === null ? null : $this->execute($job, microtime(true) + $budgetSeconds);
+    }
+
+    /**
+     * @param array<string, mixed> $job
+     *
+     * @return 'done'|'yielded'|'failed'
+     */
+    private function execute(array $job, float $deadline): string
+    {
+        $id = (int) $job['id'];
+        try {
+            $handler = $this->handlerFor((string) $job['type']);
+            $payload = json_decode((string) $job['payload'], true, 64, JSON_THROW_ON_ERROR);
+            $progress = $job['progress'] !== null ? json_decode((string) $job['progress'], true, 64, JSON_THROW_ON_ERROR) : null;
+            $result = $handler->handle(new JobContext(
+                $this->app,
+                $job,
+                is_array($payload) ? $payload : [],
+                is_array($progress) ? $progress : null,
+                $deadline,
+            ));
+            if ($result->status === 'yield') {
+                $this->queue->yield($id, $result->data);
+
+                return 'yielded';
+            }
+            $this->queue->complete($id, $result->data);
+
+            return 'done';
+        } catch (\Throwable $e) {
+            $this->app->logger()->error('Job failed', ['job_id' => $id, 'type' => $job['type'], 'error' => $e->getMessage()]);
+            $this->queue->fail($id, $e::class . ': ' . $e->getMessage());
+
+            return 'failed';
+        }
+    }
+
+    private function handlerFor(string $type): JobHandler
+    {
+        $handlers = $this->app->config()->get('jobs.handlers', []);
+        $class = is_array($handlers) ? ($handlers[$type] ?? null) : null;
+        if (!is_string($class) || !class_exists($class)) {
+            throw new \RuntimeException('No handler registered for job type ' . $type);
+        }
+        $handler = new $class();
+        if (!$handler instanceof JobHandler) {
+            throw new \RuntimeException($class . ' must implement JobHandler');
+        }
+
+        return $handler;
+    }
+}

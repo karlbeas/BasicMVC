@@ -1,0 +1,2 @@
+# storage/ must live outside the web root; this is a safety net.
+Require all denied

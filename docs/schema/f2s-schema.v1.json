@@ -1,0 +1,207 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://f2s.pro/schema/f2s-schema.v1.json",
+  "title": "F2S Schema v1",
+  "description": "Format interne d'un questionnaire F2S Pro. Pensé pour une conversion sans perte vers XLSForm (survey/choices/settings). Les expressions (relevant, constraint, calculation) utilisent la syntaxe XLSForm, ex. ${age} >= 18.",
+  "type": "object",
+  "required": ["schema_version", "settings", "languages", "default_language", "items"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "settings": {
+      "type": "object",
+      "required": ["form_id", "title"],
+      "additionalProperties": false,
+      "properties": {
+        "form_id": { "$ref": "#/$defs/name", "description": "XLSForm settings.form_id" },
+        "title": { "$ref": "#/$defs/label" },
+        "description": { "$ref": "#/$defs/label" },
+        "version": { "type": "string", "description": "XLSForm settings.version ; renseigné à la publication" },
+        "estimated_minutes": { "type": "integer", "minimum": 1, "maximum": 240 },
+        "objective": { "type": "string", "maxLength": 2000, "description": "Objectif de l'enquête, utilisé par AI Studio et le rapport" },
+        "target_population": { "type": "string", "maxLength": 1000 },
+        "sampling": {
+          "type": "string",
+          "enum": ["probabilistic", "non_probabilistic", "census", "unknown"],
+          "default": "unknown",
+          "description": "Conditionne les tests statistiques et le vocabulaire du rapport (pas de « représentatif » si non probabiliste)"
+        }
+      }
+    },
+    "languages": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/lang" },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "default_language": { "$ref": "#/$defs/lang" },
+    "choice_lists": {
+      "type": "object",
+      "description": "Équivalent de la feuille choices : clé = list_name",
+      "propertyNames": { "$ref": "#/$defs/name" },
+      "additionalProperties": {
+        "type": "array",
+        "minItems": 1,
+        "items": {
+          "type": "object",
+          "required": ["value", "label"],
+          "additionalProperties": false,
+          "properties": {
+            "value": { "type": "string", "pattern": "^[A-Za-z0-9_\\-.]+$", "maxLength": 64 },
+            "label": { "$ref": "#/$defs/label" },
+            "filter": { "type": "string", "description": "Valeur pour choice_filter (listes en cascade)" }
+          }
+        }
+      }
+    },
+    "items": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/item" }
+    }
+  },
+  "$defs": {
+    "name": {
+      "type": "string",
+      "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+      "description": "Identifiant stable, compatible avec la colonne name de XLSForm"
+    },
+    "lang": {
+      "type": "string",
+      "pattern": "^[a-z]{2,3}(-[A-Z]{2})?$",
+      "description": "Code de langue, ex. fr, en, ff, wo"
+    },
+    "label": {
+      "type": "object",
+      "description": "Texte multilingue : clé = code langue",
+      "minProperties": 1,
+      "propertyNames": { "$ref": "#/$defs/lang" },
+      "additionalProperties": { "type": "string", "maxLength": 2000 }
+    },
+    "expression": {
+      "type": "string",
+      "maxLength": 1000,
+      "description": "Expression XLSForm/XPath, ex. ${age} >= 18 and selected(${services}, 'pharmacy')"
+    },
+    "analysis": {
+      "type": "object",
+      "description": "Utilité analytique de la question, alimente « Dashboard Before Data »",
+      "additionalProperties": false,
+      "properties": {
+        "role": {
+          "type": "string",
+          "enum": ["outcome", "segment", "identifier", "metadata", "open_feedback", "screening", "none"]
+        },
+        "indicator": { "type": "string", "maxLength": 200, "description": "Nom de l'indicateur produit, ex. Taux de satisfaction" },
+        "sensitive": { "type": "boolean", "default": false, "description": "Donnée sensible : masquée dans l'IA et les tableaux publics" },
+        "personal_data": { "type": "boolean", "default": false, "description": "Donnée identifiante (nom, téléphone…) : jamais envoyée à l'IA" }
+      }
+    },
+    "question_base": {
+      "type": "object",
+      "required": ["kind", "type", "name", "label"],
+      "properties": {
+        "kind": { "const": "question" },
+        "type": {
+          "type": "string",
+          "enum": [
+            "text", "long_text", "integer", "decimal", "date", "time", "datetime",
+            "select_one", "select_multiple", "scale", "matrix",
+            "phone", "email", "note", "calculate",
+            "file", "image", "geopoint"
+          ],
+          "description": "file, image, geopoint : hors MVP (phases 5-6)"
+        },
+        "name": { "$ref": "#/$defs/name" },
+        "label": { "$ref": "#/$defs/label" },
+        "hint": { "$ref": "#/$defs/label" },
+        "required": { "type": "boolean", "default": false },
+        "required_message": { "$ref": "#/$defs/label" },
+        "relevant": { "$ref": "#/$defs/expression" },
+        "constraint": { "$ref": "#/$defs/expression" },
+        "constraint_message": { "$ref": "#/$defs/label" },
+        "calculation": { "$ref": "#/$defs/expression" },
+        "default": { "type": ["string", "number", "boolean"] },
+        "read_only": { "type": "boolean", "default": false },
+        "choices": { "$ref": "#/$defs/name", "description": "list_name d'une entrée de choice_lists" },
+        "choice_filter": { "$ref": "#/$defs/expression" },
+        "allow_other": { "type": "boolean", "default": false, "description": "Ajoute « Autre (préciser) »" },
+        "scale": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["min", "max"],
+          "properties": {
+            "min": { "type": "integer" },
+            "max": { "type": "integer" },
+            "min_label": { "$ref": "#/$defs/label" },
+            "max_label": { "$ref": "#/$defs/label" },
+            "preset": { "type": "string", "enum": ["likert5", "likert7", "nps", "stars5", "custom"] }
+          }
+        },
+        "rows": {
+          "type": "array",
+          "description": "Lignes d'une matrice ; chaque ligne devient une question select_one en XLSForm",
+          "items": {
+            "type": "object",
+            "required": ["name", "label"],
+            "additionalProperties": false,
+            "properties": {
+              "name": { "$ref": "#/$defs/name" },
+              "label": { "$ref": "#/$defs/label" }
+            }
+          }
+        },
+        "appearance": { "type": "string", "maxLength": 200, "description": "Colonne appearance de XLSForm" },
+        "analysis": { "$ref": "#/$defs/analysis" },
+        "x_source": { "type": "object", "description": "Champs d'origine non reconnus conservés lors d'un import (aucune perte silencieuse)" }
+      },
+      "additionalProperties": false
+    },
+    "question": {
+      "allOf": [
+        { "$ref": "#/$defs/question_base" },
+        {
+          "if": { "properties": { "type": { "enum": ["select_one", "select_multiple", "matrix"] } } },
+          "then": { "required": ["choices"] }
+        },
+        {
+          "if": { "properties": { "type": { "const": "scale" } } },
+          "then": { "required": ["scale"] }
+        },
+        {
+          "if": { "properties": { "type": { "const": "matrix" } } },
+          "then": { "required": ["rows"] }
+        },
+        {
+          "if": { "properties": { "type": { "const": "calculate" } } },
+          "then": { "required": ["calculation"] }
+        }
+      ]
+    },
+    "group": {
+      "type": "object",
+      "required": ["kind", "name", "items"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "enum": ["group", "repeat"], "description": "repeat : hors MVP" },
+        "name": { "$ref": "#/$defs/name" },
+        "label": { "$ref": "#/$defs/label" },
+        "relevant": { "$ref": "#/$defs/expression" },
+        "appearance": { "type": "string", "maxLength": 200 },
+        "page": { "type": "boolean", "default": false, "description": "Affiche le groupe comme une page (appearance field-list)" },
+        "repeat_count": { "$ref": "#/$defs/expression" },
+        "items": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/item" }
+        }
+      }
+    },
+    "item": {
+      "oneOf": [
+        { "$ref": "#/$defs/question" },
+        { "$ref": "#/$defs/group" }
+      ]
+    }
+  }
+}

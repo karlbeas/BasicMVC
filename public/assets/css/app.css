@@ -1,0 +1,11 @@
+/* F2S Pro — light theme on top of Bootstrap 5 */
+:root {
+    --f2s-primary: #0b6e4f;
+    --f2s-primary-dark: #08523b;
+}
+.bg-f2s { background-color: var(--f2s-primary); }
+.text-f2s { color: var(--f2s-primary); }
+.btn-f2s { background-color: var(--f2s-primary); border-color: var(--f2s-primary); color: #fff; }
+.btn-f2s:hover, .btn-f2s:focus { background-color: var(--f2s-primary-dark); border-color: var(--f2s-primary-dark); color: #fff; }
+.schema-pre { max-height: 32rem; overflow: auto; white-space: pre; }
+details > summary { cursor: pointer; }

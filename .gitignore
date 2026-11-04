@@ -1,0 +1,9 @@
+/vendor/
+/build/
+/.env
+/storage/cache/*
+!/storage/cache/.gitignore
+/public/f2s-path.php
+.DS_Store
+.idea/
+.vscode/

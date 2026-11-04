@@ -1,0 +1,127 @@
+{
+  "schema_version": "1.0",
+  "settings": {
+    "form_id": "satisfaction_pharmacie",
+    "title": { "fr": "Satisfaction des clients de la pharmacie", "en": "Pharmacy customer satisfaction" },
+    "estimated_minutes": 4,
+    "objective": "Mesurer la satisfaction des clients et identifier les points d'amélioration par quartier et tranche d'âge.",
+    "target_population": "Clients adultes de la pharmacie, Douala",
+    "sampling": "non_probabilistic"
+  },
+  "languages": ["fr", "en"],
+  "default_language": "fr",
+  "choice_lists": {
+    "age_groups": [
+      { "value": "18_24", "label": { "fr": "18-24 ans", "en": "18-24" } },
+      { "value": "25_39", "label": { "fr": "25-39 ans", "en": "25-39" } },
+      { "value": "40_59", "label": { "fr": "40-59 ans", "en": "40-59" } },
+      { "value": "60_plus", "label": { "fr": "60 ans et plus", "en": "60+" } }
+    ],
+    "districts": [
+      { "value": "akwa", "label": { "fr": "Akwa", "en": "Akwa" } },
+      { "value": "bonapriso", "label": { "fr": "Bonapriso", "en": "Bonapriso" } },
+      { "value": "bonamoussadi", "label": { "fr": "Bonamoussadi", "en": "Bonamoussadi" } },
+      { "value": "other", "label": { "fr": "Autre", "en": "Other" } }
+    ],
+    "yes_no": [
+      { "value": "yes", "label": { "fr": "Oui", "en": "Yes" } },
+      { "value": "no", "label": { "fr": "Non", "en": "No" } }
+    ],
+    "agreement": [
+      { "value": "1", "label": { "fr": "Pas du tout d'accord", "en": "Strongly disagree" } },
+      { "value": "2", "label": { "fr": "Pas d'accord", "en": "Disagree" } },
+      { "value": "3", "label": { "fr": "Neutre", "en": "Neutral" } },
+      { "value": "4", "label": { "fr": "D'accord", "en": "Agree" } },
+      { "value": "5", "label": { "fr": "Tout à fait d'accord", "en": "Strongly agree" } }
+    ]
+  },
+  "items": [
+    {
+      "kind": "group",
+      "name": "profile",
+      "label": { "fr": "Votre profil", "en": "Your profile" },
+      "page": true,
+      "items": [
+        {
+          "kind": "question",
+          "type": "select_one",
+          "name": "age_group",
+          "label": { "fr": "Votre tranche d'âge", "en": "Your age group" },
+          "choices": "age_groups",
+          "required": true,
+          "analysis": { "role": "segment" }
+        },
+        {
+          "kind": "question",
+          "type": "select_one",
+          "name": "district",
+          "label": { "fr": "Votre quartier", "en": "Your district" },
+          "choices": "districts",
+          "required": true,
+          "analysis": { "role": "segment" }
+        }
+      ]
+    },
+    {
+      "kind": "group",
+      "name": "experience",
+      "label": { "fr": "Votre expérience", "en": "Your experience" },
+      "page": true,
+      "items": [
+        {
+          "kind": "question",
+          "type": "scale",
+          "name": "overall_satisfaction",
+          "label": { "fr": "Dans l'ensemble, êtes-vous satisfait de notre pharmacie ?", "en": "Overall, how satisfied are you with our pharmacy?" },
+          "scale": { "min": 1, "max": 5, "preset": "stars5" },
+          "required": true,
+          "analysis": { "role": "outcome", "indicator": "Satisfaction globale" }
+        },
+        {
+          "kind": "question",
+          "type": "matrix",
+          "name": "service_quality",
+          "label": { "fr": "Donnez votre avis sur les affirmations suivantes", "en": "Rate the following statements" },
+          "choices": "agreement",
+          "rows": [
+            { "name": "staff_friendly", "label": { "fr": "Le personnel est accueillant", "en": "Staff are welcoming" } },
+            { "name": "advice_clear", "label": { "fr": "Les conseils sont clairs", "en": "Advice is clear" } },
+            { "name": "wait_ok", "label": { "fr": "Le temps d'attente est raisonnable", "en": "Waiting time is reasonable" } }
+          ],
+          "analysis": { "role": "outcome", "indicator": "Qualité de service" }
+        },
+        {
+          "kind": "question",
+          "type": "select_one",
+          "name": "product_missing",
+          "label": { "fr": "Un produit demandé était-il indisponible lors de votre dernière visite ?", "en": "Was a product you asked for unavailable on your last visit?" },
+          "choices": "yes_no",
+          "analysis": { "role": "outcome", "indicator": "Taux de rupture perçu" }
+        },
+        {
+          "kind": "question",
+          "type": "text",
+          "name": "product_missing_which",
+          "label": { "fr": "Lequel ?", "en": "Which one?" },
+          "relevant": "${product_missing} = 'yes'",
+          "analysis": { "role": "open_feedback" }
+        },
+        {
+          "kind": "question",
+          "type": "scale",
+          "name": "nps",
+          "label": { "fr": "Recommanderiez-vous notre pharmacie à un proche ? (0 à 10)", "en": "Would you recommend our pharmacy to a friend? (0 to 10)" },
+          "scale": { "min": 0, "max": 10, "preset": "nps" },
+          "analysis": { "role": "outcome", "indicator": "Net Promoter Score" }
+        },
+        {
+          "kind": "question",
+          "type": "long_text",
+          "name": "suggestion",
+          "label": { "fr": "Que devrions-nous améliorer en priorité ?", "en": "What should we improve first?" },
+          "analysis": { "role": "open_feedback" }
+        }
+      ]
+    }
+  ]
+}
