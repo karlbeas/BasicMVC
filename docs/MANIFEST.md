@@ -278,11 +278,13 @@ Règles d'économie : noms de modèles en configuration (jamais en dur), prompts
 | **2 — Analytics + équipes** | J16–J28 | Niveaux 1–3, filtres, tableaux croisés, alertes qualité, AI Insights, rapport PDF/Word ; **invitations de collaborateurs, mot de passe oublié, changement d'organisation** | Tableau de bord automatique juste sur les jeux étalons |
 | **3 — Crédits IA + pilote** | J29–J40 | Crédits IA (barème §2), administration, export XLSForm, tests, **pilote Cameroun** (accès gratuit ou offres attribuées manuellement) | Pilote en ligne, objectifs §8 mesurés |
 | **4 — Connecteurs + terrain** | J41–J75 | Connecteur Google Forms, XForm XML avancé, synchronisation, Ask My Survey ; PWA hors ligne, supervision terrain, statistiques avancées (niveaux 4–5), SPSS/Stata, tests de charge | Hors ligne validé sur appareils réels ; import Kobo → rapport en moins de 5 min |
-| **5 — Paiement** | J76–J90 | Paiement Mobile Money + carte ([ADR 0003](adr/0003-payment-gateway-abstraction.md), CinetPay d'abord), souscription Pass Projet / Pro, activation après vérification serveur du webhook, expiration et retour en gratuit | Premiers paiements réels vérifiés |
+| **5 — Identité visuelle** | J76–J85 | Mise à jour graphique : logo, charte (couleurs, styles), polices (servies localement), direction artistique de l'interface, des formulaires publics, des rapports et des e-mails | Charte appliquée partout ; contrastes conformes WCAG AA |
+| **6 — Multilingue** | J86–J95 | Interface et formulaires en **FR, EN, DE, ES, PT** : fichiers `lang/{de,es,pt}.php`, sélecteur de langue, langues des questionnaires (le schéma est déjà multilingue), formats de dates et de nombres par langue, traduction IA des formulaires (barème §2) | Toutes les clés traduites (test de parité des fichiers de langue) ; un formulaire publié dans les 5 langues |
+| **7 — Paiement** | J96–J110 | Paiement Mobile Money + carte ([ADR 0003](adr/0003-payment-gateway-abstraction.md), CinetPay d'abord), souscription Pass Projet / Pro, activation après vérification serveur du webhook, expiration et retour en gratuit | Premiers paiements réels vérifiés |
 
 Priorité commerciale : le **pont Kobo/Excel → tableau de bord → rapport IA** est la fonction la plus rapide à vendre.
 
-> Feuille de route réordonnée le 2026-11-04 à la demande du porteur de projet : création/collecte/imports d'abord, puis analyse et équipes, crédits IA et pilote, connecteurs et hors ligne, et **le paiement en dernier**. Tant que le paiement n'existe pas, les offres payantes s'attribuent manuellement (table `organizations.plan_id`).
+> Feuille de route réordonnée le 2026-11-04 à la demande du porteur de projet : création/collecte/imports d'abord, puis analyse et équipes, crédits IA et pilote, connecteurs et hors ligne, identité visuelle, multilingue (FR/EN/DE/ES/PT), et **le paiement en dernier**. Tant que le paiement n'existe pas, les offres payantes s'attribuent manuellement (table `organizations.plan_id`).
 
 ### Budget
 
