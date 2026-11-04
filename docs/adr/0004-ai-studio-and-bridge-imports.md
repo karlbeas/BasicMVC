@@ -27,6 +27,10 @@ La v0.4.0 ajoute la création de questionnaires par IA (API Mammouth) et l'impor
 - **Crédits** (`credit_ledger`) : vérifiés avant, **débités une seule fois et seulement si un formulaire valide est enregistré** (référence = identifiant de tâche, contrainte d'unicité). Allocation selon l'offre : `ai_credits` (unique) ou `ai_credits_per_month` (Pro).
 - Un formulaire invalide n'est jamais enregistré ; au-delà du quota de questions de l'offre, rien n'est créé ni débité.
 
+### Amendement v0.4.3 — aucune dépendance au CRON (retour de production)
+
+En production, la génération restait bloquée : l'hébergeur ne faisait pas tourner le CRON, et un appel IA unique de 30 s à 2 min ne tient ni dans une page web (≈ 30 s) ni dans un CRON que l'hébergeur coupe. Décision : **uniquement des appels IA courts** (une section ou une question, `max_tokens` 3 000, ≈ 10–20 s), chacun sauvegardé (`checkpoint`). La page de suivi les enchaîne dans sa propre limite de temps : création, retouche (partie par partie, `{"unchanged": true}` si non concernée) et réparation (seulement les parties fautives, après corrections automatiques sans IA) fonctionnent **sans CRON**. Un processus tué compte comme une tentative (échec net après 3). Les migrations sont appliquées à la première visite après une mise à jour. Le CRON reste recommandé (tâches de fond, progression page fermée), jamais requis.
+
 ## Conséquences
 
 - (+) Aucune dépendance lourde ajoutée ; archive de livraison toujours < 1 Mo.

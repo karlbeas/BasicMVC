@@ -41,7 +41,7 @@ Copier `.env.example` en `.env` et renseigner `APP_URL`, `DB_*`, `APP_ENV=produc
 1. Créez une clé API sur Mammouth (https://mammouth.ai).
 2. Gestionnaire de fichiers → `public_html/.env` (fichier caché : activez « Afficher les fichiers cachés ») → renseignez `MAMMOUTH_API_KEY=votre_clé`.
 3. Optionnel : `AI_DAILY_BUDGET_USD_PER_ORG` (plafond quotidien par organisation, 0,50 $ par défaut) et les noms de modèles `AI_MODEL_*`.
-4. **La tâche CRON est indispensable** : la rédaction du questionnaire (souvent 30 s à 2 min) dépasse la limite de temps d'une page web ; c'est le CRON qui l'exécute. Si elle ne tourne pas, la page de suivi l'indique (« La tâche planifiée (CRON) ne semble pas tourner »). Pour vérifier : `storage/cache/cron.last` doit être mis à jour chaque minute.
+4. **Pas besoin de CRON pour l'IA** : la rédaction se fait par petites étapes que la page de suivi enchaîne elle-même — gardez-la ouverte jusqu'à la fin (1 à 2 minutes). Avec un CRON actif, le travail continue même si vous fermez la page.
 
 Les appels sortants HTTPS (cURL) doivent être autorisés par l'hébergeur vers `api.mammouth.ai`.
 
@@ -83,7 +83,7 @@ Vérification : `/health` doit répondre `{"status":"ok","db":"ok"}`.
 1. Récupérer la nouvelle archive.
 2. Sauvegarder la base (phpMyAdmin → Exporter) et `.env`.
 3. Extraire l'archive par-dessus l'installation existante (le zip ne contient pas de `.env` : la configuration est conservée). Supprimer `storage/install.key` s'il réapparaît (sans effet une fois installé, mais inutile).
-4. **Rien d'autre à faire** : à son passage suivant (≤ 1 minute), la tâche CRON applique automatiquement les nouvelles migrations. Entre-temps, le site affiche « Mise à jour en cours ». Sans CRON, appeler une fois l'URL `/cron/VOTRE_JETON`.
+4. **Rien d'autre à faire** : la première visite applique automatiquement les nouvelles migrations (le CRON le fait aussi s'il est actif).
 5. Contrôler `/health` et la page d'accueil.
 
 ## 8. Sécurité — liste de contrôle
