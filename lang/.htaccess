@@ -1,0 +1,2 @@
+# Internal directory: never served over HTTP (defence in depth for public_html installs).
+Require all denied

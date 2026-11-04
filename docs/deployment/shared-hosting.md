@@ -11,61 +11,45 @@ Guide pour cPanel / Plesk / DirectAdmin (Apache ou LiteSpeed). Décision : [ADR 
 
 Réglages PHP conseillés (*MultiPHP INI Editor*) : `memory_limit = 256M`, `max_execution_time = 60`, `upload_max_filesize = 10M`, `post_max_size = 12M`, `display_errors = Off`.
 
-## 2. Construire l'archive de release (sur votre poste ou en CI)
+## 2. Installation rapide dans `public_html` (méthode standard)
 
-```bash
-bash bin/build-release.sh          # produit build/f2s-pro-<version>.zip
-```
+Archive : `f2s-pro-X.Y.Z-public_html.zip` (contenu à la racine du zip) et son **code d'installation** (fourni avec l'archive, fichier `storage/install.key`).
 
-L'archive contient `vendor/` (dépendances de production uniquement, autoloader optimisé) : **aucune commande Composer n'est nécessaire sur le serveur**. La CI GitHub (`.github/workflows/ci.yml`) produit la même archive en artefact à chaque push.
+1. cPanel → *Bases de données MySQL* : créer une base (ex. `moncompte_f2s`), un utilisateur, et lui donner **tous les privilèges** sur la base.
+2. cPanel → *Gestionnaire de fichiers* → `public_html/` : supprimer l'éventuel `index.html` par défaut, téléverser le zip, clic droit → *Extraire*. (Un sous-dossier, ex. `public_html/enquetes/`, fonctionne aussi.)
+3. Ouvrir `https://votre-domaine/` : l'**assistant d'installation** s'affiche. Il vérifie PHP et les droits, demande le code d'installation et les accès à la base, crée les tables et écrit `.env`. Il se désactive ensuite définitivement (le code est supprimé).
+4. Ajouter la tâche CRON affichée en fin d'installation (section 6).
+5. Créer le premier compte.
 
-## 3. Disposition des fichiers
+Protection : le `.htaccess` racine envoie toutes les requêtes vers `public/`, refuse les fichiers cachés (`.env`) et sensibles ; chaque dossier interne (`app/`, `config/`, `storage/`, `vendor/`…) porte en plus son propre `Require all denied`. Après installation, vérifiez que `https://votre-domaine/.env`, `/storage/` et `/vendor/` renvoient 403 ou 404.
 
-Principe : **seul le contenu de `public/` est accessible depuis le web.** `.env`, `storage/`, `vendor/` et le code restent hors de la racine web.
+## 3. Disposition alternative : application hors de la racine web
 
-### Option A — recommandée : racine du domaine pointée sur `public/`
+Plus robuste si l'hébergeur le permet (archive `f2s-pro-X.Y.Z.zip`, dossier `f2s-pro/`) :
 
-```
-/home/USER/f2s/              ← archive décompressée ici
-    app/ bin/ config/ database/ lang/ storage/ vendor/ .env
-    public/                  ← racine web du (sous-)domaine
-```
+- **A.** Décompresser dans `/home/USER/f2s/` et pointer la racine du (sous-)domaine sur `/home/USER/f2s/public` (cPanel → *Domaines*).
+- **B.** Décompresser dans `/home/USER/f2s/`, copier le contenu de `public/` dans `public_html/` et créer `public_html/f2s-path.php` contenant `<?php return '/home/USER/f2s';`.
 
-cPanel → *Domaines* → modifier la « racine du document » du domaine ou sous-domaine : `/home/USER/f2s/public`. (Possible pour les sous-domaines et domaines additionnels ; pour le domaine principal, voir B.)
+L'assistant `/install` fonctionne de la même façon dans ces deux cas.
 
-### Option B — `public_html` imposé
+## 4. Configuration manuelle (sans l'assistant)
 
-1. Décompresser l'archive dans `/home/USER/f2s/`.
-2. Copier **le contenu** de `f2s/public/` dans `public_html/` (ou un sous-dossier `public_html/enquetes/`).
-3. Créer `public_html/f2s-path.php` :
-   ```php
-   <?php return '/home/USER/f2s';
-   ```
-   (Ce fichier est protégé par le `.htaccess` copié depuis `public/`.)
-4. À chaque mise à jour, recopier `public/` (assets) en plus du reste.
+Copier `.env.example` en `.env` et renseigner `APP_URL`, `DB_*`, `APP_ENV=production`, `APP_DEBUG=false`, `CRON_HTTP_TOKEN`. Droits : `.env` en `600` ; `storage/` en écriture pour PHP.
 
-Avec SSH, un lien symbolique remplace la copie : `ln -s ~/f2s/public ~/public_html/enquetes`.
+## 5. Base de données (mises à jour)
 
-### Option C — dernier recours : tout dans `public_html`
+L'assistant applique les migrations à l'installation. Pour une **mise à jour** :
 
-Décompresser l'archive directement dans `public_html/`. Le `.htaccess` racine redirige tout vers `public/` et refuse les fichiers cachés (`.env`…). **Vérifiez** que `https://votre-domaine/.env`, `/storage/` et `/vendor/composer/installed.json` renvoient 403/404. Préférez A ou B.
-
-### Sous-dossier
-
-L'application fonctionne aussi sous `https://exemple.com/enquetes/` : le chemin de base est détecté automatiquement. En cas de doute, fixez `APP_URL=https://exemple.com/enquetes`.
-
-## 4. Configuration
-
-Copier `.env.example` en `.env` (gestionnaire de fichiers) et renseigner au minimum `APP_URL`, `DB_*`, `APP_ENV=production`, `APP_DEBUG=false`, `STORAGE_PATH` (chemin absolu) et, si besoin, `CRON_HTTP_TOKEN`. Droits : `.env` en `600` ; `storage/` et ses sous-dossiers en écriture pour PHP (`755` ou `775` selon l'hébergeur).
-
-## 5. Base de données
-
-- **Avec SSH ou Terminal cPanel** : `php bin/migrate.php` (puis `php bin/migrate.php --status`).
-- **Sans SSH** :
-  - soit générer le script sur votre poste : `php bin/migrate.php --print > f2s-schema.sql` puis l'importer dans **phpMyAdmin** (base vide uniquement) ;
-  - soit créer une tâche CRON ponctuelle `php /home/USER/f2s/bin/migrate.php`, attendre une minute, puis la supprimer.
+- avec Terminal / SSH : `php bin/migrate.php` ;
+- sans : créer une tâche CRON ponctuelle `php /chemin/vers/bin/migrate.php`, attendre une minute, la supprimer ; ou importer dans phpMyAdmin le script de `php bin/migrate.php --print` (base vide uniquement).
 
 Une migration déjà appliquée n'est jamais modifiée : `migrate.php` refuse de tourner si un fichier appliqué a changé.
+
+### Construire les archives (développeur)
+
+```bash
+bash bin/build-release.sh X.Y.Z   # → build/f2s-pro-X.Y.Z-public_html.zip, build/f2s-pro-X.Y.Z.zip, code d'installation
+```
 
 ## 6. Tâches planifiées (file de tâches)
 
@@ -87,9 +71,9 @@ Vérification : `/health` doit répondre `{"status":"ok","db":"ok"}`.
 
 ## 7. Mises à jour
 
-1. Construire la nouvelle archive.
+1. Récupérer la nouvelle archive.
 2. Sauvegarder la base (phpMyAdmin → Exporter) et `.env`.
-3. Remplacer `app/ bin/ config/ database/ lang/ public/ vendor/` (ne pas toucher `.env` ni `storage/`).
+3. Extraire l'archive par-dessus l'installation existante **sans écraser `.env` ni `storage/`** (le zip ne contient pas de `.env` ; supprimer `storage/install.key` s'il réapparaît).
 4. Lancer les migrations (section 5).
 5. Contrôler `/health` et la page d'accueil.
 
@@ -98,7 +82,7 @@ Vérification : `/health` doit répondre `{"status":"ok","db":"ok"}`.
 - [ ] `APP_DEBUG=false`, `APP_ENV=production`.
 - [ ] `https://domaine/.env`, `/storage/`, `/vendor/`, `/app/` → 403 ou 404.
 - [ ] HTTPS forcé (redirection 301 dans `public/.htaccess`).
-- [ ] `storage/` hors de la racine web (options A/B) et non listable.
+- [ ] `storage/` non accessible depuis le web (403/404) ; `storage/install.key` absent après installation.
 - [ ] Sauvegardes automatiques de la base activées chez l'hébergeur et restauration testée.
 - [ ] Journaux applicatifs : `storage/logs/app-AAAA-MM-JJ.log` (purge périodique).
 

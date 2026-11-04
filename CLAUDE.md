@@ -69,8 +69,10 @@ bash bin/build-release.sh [version]          # archive de déploiement (vendor/ 
 **À chaque version développée**, construire l'archive installable sur l'hébergement mutualisé et la remettre à l'utilisateur (fichier zip) :
 
 ```bash
-bash bin/build-release.sh X.Y.Z   # → build/f2s-pro-X.Y.Z.zip (versionnage sémantique, à reporter dans l'état d'avancement)
+bash bin/build-release.sh X.Y.Z   # → build/f2s-pro-X.Y.Z-public_html.zip (à remettre) + code d'installation
 ```
+
+L'utilisateur installe **tout dans `public_html`** : remettre le zip `-public_html` et le code d'installation affiché, et versionner (X.Y.Z) dans l'état d'avancement.
 
 ## Où en est le projet
 

@@ -7,6 +7,7 @@ use App\Controllers\Control\AuthController;
 use App\Controllers\Control\ProjectController;
 use App\Controllers\HomeController;
 use App\Controllers\Studio\FormController;
+use App\Controllers\System\InstallController;
 use App\Controllers\System\SystemController;
 use App\Core\Router;
 
@@ -39,6 +40,8 @@ return static function (Router $r): void {
     $r->post('/api/forms/validate', [FormApiController::class, 'validate'], ['auth']);
 
     // System
+    $r->get('/install', [InstallController::class, 'show']);
+    $r->post('/install', [InstallController::class, 'install']);
     $r->get('/health', [SystemController::class, 'health']);
     $r->get('/cron/{token}', [SystemController::class, 'cron'], ['nocsrf']);
     $r->post('/cron/{token}', [SystemController::class, 'cron'], ['nocsrf']);

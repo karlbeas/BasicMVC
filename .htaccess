@@ -1,8 +1,12 @@
-# F2S Pro — LAST-RESORT layout only: the whole project was uploaded into the
-# web root (public_html). Prefer pointing the domain's document root to public/
-# (see docs/deployment/shared-hosting.md). This file routes every request into
-# public/ and denies direct access to app/, config/, storage/, vendor/, .env…
+# F2S Pro — installation directly in public_html (or a sub-folder of it).
+# Every request is routed into public/; app/, config/, storage/, vendor/, .env…
+# are never served (each internal folder also carries its own "Require all denied").
 Options -Indexes
+DirectoryIndex index.php
+
+<FilesMatch "^(\.env.*|composer\.(json|lock)|VERSION|.*\.(md|sql|sh|neon|dist|key|log))$">
+    Require all denied
+</FilesMatch>
 
 <IfModule mod_rewrite.c>
     RewriteEngine On

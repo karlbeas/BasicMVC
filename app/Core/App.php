@@ -186,6 +186,11 @@ final class App
     public function handle(Request $request): Response
     {
         try {
+            // Fresh upload (no .env yet): everything goes to the web installer.
+            if (!is_file($this->root . '/.env') && Env::get('DB_DATABASE', '') === '' && !str_starts_with($request->path, '/install')
+                && !str_starts_with($request->path, '/assets/')) {
+                return $this->withSecurityHeaders(Response::redirect($this->url('install')));
+            }
             $route = $this->router()->match($request->method, $request->path);
             $request->params = $route['params'];
             $middleware = $route['middleware'];
