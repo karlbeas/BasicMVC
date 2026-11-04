@@ -7,6 +7,7 @@
 # Not shipped in release archives (git archive)
 /tests export-ignore
 /.github export-ignore
+/docs/ci export-ignore
 # docs/schema/ stays: FormValidator reads the JSON Schema at runtime.
 /docs/adr export-ignore
 /docs/deployment export-ignore
