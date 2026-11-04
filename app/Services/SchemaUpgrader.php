@@ -31,7 +31,12 @@ final class SchemaUpgrader
         return $files === [] ? '' : (string) end($files);
     }
 
-    /** Cheap check for web requests: compares the marker with the newest migration file. */
+    /**
+     * Cheap check for web requests: compares the marker with the newest migration file.
+     * Impure: the marker file changes when an upgrade runs.
+     *
+     * @phpstan-impure
+     */
     public function upToDateMarker(): bool
     {
         $marker = $this->markerFile();
@@ -39,7 +44,11 @@ final class SchemaUpgrader
         return is_file($marker) && trim((string) file_get_contents($marker)) === $this->latestFile();
     }
 
-    /** Authoritative check against schema_migrations; refreshes the marker when up to date. */
+    /**
+     * Authoritative check against schema_migrations; refreshes the marker when up to date.
+     *
+     * @phpstan-impure
+     */
     public function isUpToDate(): bool
     {
         $applied = $this->migrator->applied();

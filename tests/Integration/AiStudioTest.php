@@ -183,17 +183,21 @@ final class AiStudioTest extends DatabaseTestCase
         [$ctx, $projectId] = $this->accountWithProject();
         $broken = json_decode($this->sectionAnswer(1), true);
         $broken['group']['items'][0]['type'] = 'slider'; // structural error: no deterministic fix
+        $good = json_decode($this->sectionAnswer(1), true);
         $this->transport->responses = [
             FakeTransport::ok('{"sections": [{"name": "a", "title": "A"}]}'),
             FakeTransport::ok((string) json_encode($broken)),
-            FakeTransport::ok($this->minimalForm()),
+            FakeTransport::ok((string) json_encode(['choice_lists' => $good['choice_lists'], 'item' => $good['group']])),
         ];
 
         $result = $this->runJob($ctx, 'ai.form_generate', $this->brief($ctx, $projectId));
 
         self::assertArrayHasKey('form_public_id', $result->data);
         self::assertCount(3, $this->transport->requests);
-        self::assertStringContainsString('Erreurs', (string) $this->transport->requests[2]['body']['messages'][1]['content']);
+        $repair = (string) $this->transport->requests[2]['body']['messages'][1]['content'];
+        self::assertStringContainsString('Erreurs', $repair);
+        self::assertStringContainsString('slider', $repair, 'only the faulty part is sent for repair');
+        self::assertSame(3000, $this->transport->requests[2]['body']['max_tokens'], 'the repair is a short call too');
     }
 
     public function testCommonSlipsAreFixedWithoutARepairCall(): void
@@ -262,7 +266,7 @@ final class AiStudioTest extends DatabaseTestCase
             self::assertSame('timeout', $e->reason);
         }
         $saved = json_decode((string) (new JobQueue($this->db()))->find($this->lastJobId)['progress'], true);
-        self::assertSame('sections', $saved['step'], 'The plan and section 1 were checkpointed before the failure');
+        self::assertSame('parts', $saved['step'], 'The plan and section 1 were checkpointed before the failure');
         self::assertCount(1, $saved['done']);
 
         $this->transport->requests = [];
@@ -308,16 +312,24 @@ final class AiStudioTest extends DatabaseTestCase
     {
         [$ctx, $projectId] = $this->accountWithProject();
         $ids = (new FormService($this->db(), FormValidator::default(), new AuditLogger($this->db())))->createFromJson($ctx, $projectId, $this->minimalForm());
-        $revised = json_decode($this->minimalForm(), true);
-        $revised['items'][] = ['kind' => 'question', 'type' => 'text', 'name' => 'wait_time', 'label' => ['fr' => "Temps d'attente", 'en' => 'Waiting time']];
-        $this->transport->responses = [FakeTransport::ok((string) json_encode($revised))];
+        $form = json_decode($this->minimalForm(), true);
+        $part2 = ['kind' => 'group', 'name' => 'suite', 'label' => ['fr' => 'Suite', 'en' => 'Next'], 'items' => [
+            $form['items'][1],
+            ['kind' => 'question', 'type' => 'text', 'name' => 'wait_time', 'label' => ['fr' => "Temps d'attente", 'en' => 'Waiting time']],
+        ]];
+        // One short call per part: part 1 untouched, part 2 extended.
+        $this->transport->responses = [FakeTransport::ok('{"unchanged": true}'), FakeTransport::ok((string) json_encode(['item' => $part2]))];
 
         $result = $this->runJob($ctx, 'ai.form_revise', ['mode' => 'revise', 'user_id' => $ctx->userId(), 'form_id' => $ids['form_id'], 'instruction' => "Ajoute le temps d'attente"]);
 
         self::assertArrayHasKey('form_public_id', $result->data, (string) json_encode($result->data));
         self::assertSame(1, (new CreditLedger($this->db()))->summary($ctx->organizationId())['spent']);
         self::assertStringContainsString('wait_time', (string) $this->db()->fetchValue('SELECT schema_json FROM form_versions WHERE id = ?', [$ids['version_id']]));
+        self::assertCount(2, $this->transport->requests);
         self::assertStringContainsString("Ajoute le temps d'attente", (string) $this->transport->requests[0]['body']['messages'][1]['content']);
+        $schema = json_decode((string) $this->db()->fetchValue('SELECT schema_json FROM form_versions WHERE id = ?', [$ids['version_id']]), true);
+        self::assertSame('consent', $schema['items'][0]['name'], 'unchanged part kept as is');
+        self::assertSame("\${consent} = 'yes'", $schema['items'][1]['items'][0]['relevant']);
     }
 
     public function testNetworkErrorsAreLeftToTheQueueRetry(): void

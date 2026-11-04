@@ -19,97 +19,113 @@ use App\Services\ContextFactory;
 use App\Services\FormInvalidException;
 use App\Services\FormSchema;
 use App\Services\FormService;
+use App\Services\FormValidationResult;
 use App\Services\FormValidator;
 use App\Services\ImmutableVersionException;
 use App\Services\QuotaExceededException;
 
 /**
- * AI Studio job (types "ai.form_generate" and "ai.form_revise").
- * generate: plan of sections → questionnaire → validation (+ one automatic repair) → draft form.
- * revise:   current draft + instruction → validation (+ one repair) → same draft updated.
- * Each AI call is a resumable step: if the remaining time cannot fit a call, the job yields.
- * Credits are charged once, only when a valid form has been saved. Never stores an invalid form.
+ * AI Studio job (types "ai.form_generate" and "ai.form_revise"), built for shared hosting:
+ * ONLY SHORT AI CALLS (one section or one question each, about 10–20 s), each checkpointed.
+ * The status page runs them one after another within its own time limit, so the job
+ * progresses with or without a CRON, and survives a host killing a process.
  *
+ *  generate: plan of sections → one call per section → assemble → validate
+ *  revise:   current draft split into parts → one call per part (or "unchanged") → assemble → validate
+ *  validate: deterministic autofix, then at most one repair call per faulty part.
+ *
+ * Credits are charged once, only when a valid form has been saved. Never stores an invalid form.
  * Payload: {mode, user_id, project_id?, form_id?, brief?: {...}, instruction?: string}
  */
 final class FormGenerationHandler implements JobHandler
 {
     public static ?AiGateway $gatewayOverride = null; // tests
 
+    private JobContext $ctx;
+    private AiGateway $gateway;
+    private int $orgId;
+    private int $userId;
+
     public function handle(JobContext $ctx): JobResult
     {
+        $this->ctx = $ctx;
         $db = $ctx->app->db();
-        $orgId = (int) $ctx->organizationId();
+        $this->orgId = (int) $ctx->organizationId();
         $p = $ctx->payload;
         $mode = ($p['mode'] ?? 'generate') === 'revise' ? 'revise' : 'generate';
         $operation = $mode === 'revise' ? 'form_revision' : 'form_generation';
         $cost = $ctx->app->config()->int('ai.credits.' . $operation, $mode === 'revise' ? 1 : 5);
-        $userId = (int) ($p['user_id'] ?? 0);
-        $gateway = self::$gatewayOverride ?? new AiGateway($db, $ctx->app->config());
+        $this->userId = (int) ($p['user_id'] ?? 0);
+        $this->gateway = self::$gatewayOverride ?? new AiGateway($db, $ctx->app->config());
         $credits = new CreditLedger($db);
-        $progress = $ctx->progress ?? ['step' => $mode === 'revise' ? 'form' : 'plan'];
+        $progress = $ctx->progress ?? ['step' => $mode === 'revise' ? 'split' : 'plan'];
 
         try {
-            $auth = ContextFactory::forUser($db, $orgId, $userId);
+            $auth = ContextFactory::forUser($db, $this->orgId, $this->userId);
         } catch (\DomainException) {
             return JobResult::done(['error' => 'forbidden']);
         }
         if (!$auth->can($mode === 'revise' ? 'form.edit' : 'form.create')) {
             return JobResult::done(['error' => 'forbidden']);
         }
-        if ($credits->available($orgId) < $cost) {
+        if ($credits->available($this->orgId) < $cost) {
             return JobResult::done(['error' => 'insufficient_credits']);
         }
-        if (!$gateway->isConfigured()) {
+        if (!$this->gateway->isConfigured()) {
             return JobResult::done(['error' => 'not_configured']);
         }
 
-        $languages = $this->languages($p);
-        $maxTokens = static fn(string $key, int $default): int => $ctx->app->config()->int('ai.max_tokens.' . $key, $default);
-        $prompt = static fn(string $name): string => (string) file_get_contents($ctx->app->root . '/app/Prompts/' . $name . '.v1.md');
-        $call = function (string $op, string $system, string $user, int $tokens) use ($ctx, $gateway, $orgId, $userId): AiResponse {
-            // CRON (CLI): no PHP time limit, the call may use the full AI timeout. Web: capped by the request deadline.
-            return $gateway->complete($op, 'form', $system, $user, $tokens, $orgId, $userId, (int) $ctx->job['id'], $ctx->canRunLong() ? null : $ctx->deadline());
-        };
-        // Can this process attempt the step now? Otherwise yield: the CRON will run it.
-        $canStart = static fn(string $op): bool => $ctx->canRunLong() || $ctx->secondsLeft() >= $ctx->app->config()->int('ai.step_seconds.' . $op, 90);
-
         try {
-            // Step 1 (generate only): plan of sections (short call).
+            // 1a. generate: plan of sections.
             if ($progress['step'] === 'plan') {
-                if (!$canStart('form_plan')) {
+                if (!$this->canStart()) {
                     return JobResult::yield($progress);
                 }
-                $plan = $call('form_plan', $prompt('form_plan'), $this->briefText($p, $languages), $maxTokens('form_plan', 1500))->json();
+                $languages = $this->languages($p);
+                $plan = $this->call('form_plan', 'form_plan', $this->briefText($p, $languages), 'form_plan')->json();
                 $sections = $this->planSections($plan);
                 if ($plan === null || $sections === []) {
                     return JobResult::done(['error' => 'invalid_output']);
                 }
-                $progress = ['step' => 'sections', 'plan' => $plan, 'sections' => $sections, 'done' => [], 'misses' => 0];
+                $progress = [
+                    'step' => 'parts', 'mode' => 'generate', 'plan' => $plan,
+                    'todo' => $sections, 'done' => [], 'misses' => 0,
+                    'settings' => $this->settings($p, $plan, $languages), 'languages' => $languages,
+                ];
                 $ctx->checkpoint($progress);
             }
 
-            // Step 2 (generate): one short call per section, checkpointed — each fits the
-            // time limit of a web request, so generation progresses even without the CRON.
-            while ($progress['step'] === 'sections') {
+            // 1b. revise: split the current draft into parts (no AI call).
+            if ($progress['step'] === 'split') {
+                $current = $this->currentDraft((int) ($p['form_id'] ?? 0));
+                if ($current === null) {
+                    return JobResult::done(['error' => 'not_draft']);
+                }
+                $form = json_decode((string) $current['schema_json'], true, 64, JSON_THROW_ON_ERROR);
+                $progress = [
+                    'step' => 'parts', 'mode' => 'revise',
+                    'todo' => FormAssembler::parts($form), 'done' => [], 'misses' => 0,
+                    'settings' => $form['settings'], 'languages' => array_values((array) $form['languages']),
+                    'outline' => $this->outline($form),
+                ];
+                $ctx->checkpoint($progress);
+            }
+
+            // 2. One short call per part, checkpointed after each.
+            while ($progress['step'] === 'parts') {
                 $index = count($progress['done']);
-                if ($index >= count($progress['sections'])) {
-                    $form = FormAssembler::assemble($progress['done'], $this->settings($p, $progress['plan'], $languages), $languages);
-                    $progress = ['step' => 'validate', 'candidate' => (string) json_encode($form, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), 'repaired' => false, 'total' => count($progress['sections'])];
+                if ($index >= count($progress['todo'])) {
+                    $progress['step'] = 'validate';
+                    $progress['repaired'] = false;
                     $ctx->checkpoint($progress);
                     break;
                 }
-                if (!$canStart('form_section')) {
+                if (!$this->canStart()) {
                     return JobResult::yield($progress);
                 }
-                $section = $progress['sections'][$index];
-                $user = $this->briefText($p, $languages)
-                    . "\nPlan complet :\n" . json_encode($progress['plan'], JSON_UNESCAPED_UNICODE)
-                    . "\n\nSection à rédiger maintenant (" . ($index + 1) . '/' . count($progress['sections']) . ") :\n" . json_encode($section, JSON_UNESCAPED_UNICODE)
-                    . "\n\nIdentifiants déjà utilisés (interdits) : " . implode(', ', $this->usedNames($progress['done']))
-                    . "\nListes de choix déjà définies (réutilisables) : " . json_encode($this->knownLists($progress['done']), JSON_UNESCAPED_UNICODE);
-                $answer = $call('form_section', $prompt('form_section'), $user, $maxTokens('form_section', 3000))->json();
-                $built = $answer === null ? null : FormAssembler::section($answer, (string) ($section['name'] ?? 'section_' . ($index + 1)), (string) ($section['title'] ?? 'Section ' . ($index + 1)), $languages[0]);
+                $built = $progress['mode'] === 'generate'
+                    ? $this->writeSection($p, $progress, $index)
+                    : $this->revisePart($p, $progress, $index);
                 if ($built === null) {
                     // One unusable answer is retried on the next pass; two in a row stop the job.
                     if (++$progress['misses'] >= 2) {
@@ -124,56 +140,41 @@ final class FormGenerationHandler implements JobHandler
                 $ctx->checkpoint($progress);
             }
 
-            // Step 2 (revise): the whole questionnaire in one call (long: usually the CRON).
-            if ($progress['step'] === 'form') {
-                if (!$canStart($operation)) {
-                    return JobResult::yield($progress);
-                }
-                $current = $this->currentDraft($ctx, $orgId, (int) ($p['form_id'] ?? 0));
-                if ($current === null) {
-                    return JobResult::done(['error' => 'not_draft']);
-                }
-                $user = "Consigne :\n" . mb_substr((string) ($p['instruction'] ?? ''), 0, 2000) . "\n\nQuestionnaire actuel :\n" . $current['schema_json'];
-                $answer = $call('form_revision', $prompt('form_revision'), $user, $maxTokens('form_revision', 9000));
-                $progress = ['step' => 'validate', 'candidate' => $answer->content, 'repaired' => false] + $progress;
-                $ctx->checkpoint($progress);
-            }
-
-            // Step 3: validation, with at most one automatic repair.
+            // 3. Assemble, autofix, validate; repair faulty parts once (short calls too).
             $validator = FormValidator::default();
-            $candidate = AiResponse::extractJson((string) ($progress['candidate'] ?? ''));
-            $json = $candidate === null ? '' : (string) json_encode($this->normalize($candidate, $languages, $mode), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-            $result = $validator->validateJson($json === '' ? '{}' : $json);
-            if (!$result->isValid() && $candidate !== null) {
-                // Cheap deterministic fixes first: a long repair call is the last resort.
-                $fixed = (string) json_encode(FormAssembler::autofix(json_decode($json, true, 64, JSON_THROW_ON_ERROR)), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-                $fixedResult = $validator->validateJson($fixed);
-                if ($fixedResult->isValid()) {
-                    [$json, $result] = [$fixed, $fixedResult];
-                }
-            }
-            if (!$result->isValid()) {
-                if ($progress['repaired'] === true) {
+            [$json, $result] = $this->assemble($progress, $validator);
+            while (!$result->isValid()) {
+                $faulty = $this->faultyParts($result->errors(), count($progress['done']));
+                if ($progress['repaired'] === true || $faulty === []) {
                     return JobResult::done(['error' => 'invalid_output', 'details' => array_slice($result->errors(), 0, 5)]);
                 }
-                if (!$canStart('form_repair')) {
-                    return JobResult::yield($progress);
+                $progress['repair_todo'] ??= $faulty;
+                while ($progress['repair_todo'] !== []) {
+                    if (!$this->canStart()) {
+                        return JobResult::yield($progress);
+                    }
+                    $i = (int) array_shift($progress['repair_todo']);
+                    $errors = array_filter($result->errors(), static fn(array $e): bool => str_starts_with($e['path'], '/items/' . $i . '/') || $e['path'] === '/items/' . $i);
+                    $answer = $this->call('form_repair', 'form_item_repair', "Erreurs :\n"
+                        . implode("\n", array_map(static fn(array $e): string => $e['path'] . ' : ' . $e['message'], array_slice($errors, 0, 10)))
+                        . "\n\nListes de choix disponibles : " . json_encode($progress['done'][$i]['choice_lists'], JSON_UNESCAPED_UNICODE)
+                        . "\n\nPartie :\n" . json_encode($progress['done'][$i]['group'], JSON_UNESCAPED_UNICODE), 'form_item')->json();
+                    $fixed = $answer === null ? null : FormAssembler::item($answer, $progress['done'][$i]);
+                    if ($fixed !== null) {
+                        $progress['done'][$i] = $fixed;
+                    }
+                    $ctx->checkpoint($progress);
                 }
-                $errors = implode("\n", array_map(static fn(array $e): string => $e['path'] . ' : ' . $e['message'], array_slice($result->errors(), 0, 15)));
-                $answer = $call('form_repair', $prompt('form_repair'), "Erreurs :\n" . $errors . "\n\nJSON :\n" . ($json !== '' ? $json : (string) $progress['candidate']), $maxTokens($operation, 9000));
-                $progress = ['candidate' => $answer->content, 'repaired' => true] + $progress;
-                $candidate = $answer->json();
-                $json = $candidate === null ? '' : (string) json_encode($this->normalize($candidate, $languages, $mode), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-                $result = $validator->validateJson($json === '' ? '{}' : $json);
-                if (!$result->isValid()) {
-                    return JobResult::done(['error' => 'invalid_output', 'details' => array_slice($result->errors(), 0, 5)]);
-                }
+                $progress['repaired'] = true;
+                unset($progress['repair_todo']);
+                $ctx->checkpoint($progress);
+                [$json, $result] = $this->assemble($progress, $validator);
             }
 
-            // Step 4: save, then charge credits (idempotent per job).
+            // 4. Save, then charge credits (idempotent per job).
             $forms = new FormService($db, $validator, new AuditLogger($db));
             if ($mode === 'revise') {
-                $current = $this->currentDraft($ctx, $orgId, (int) ($p['form_id'] ?? 0));
+                $current = $this->currentDraft((int) ($p['form_id'] ?? 0));
                 if ($current === null) {
                     return JobResult::done(['error' => 'not_draft']);
                 }
@@ -182,8 +183,8 @@ final class FormGenerationHandler implements JobHandler
             } else {
                 $formId = $forms->createFromJson($auth, (int) ($p['project_id'] ?? 0), $json, 'ai')['form_id'];
             }
-            $credits->charge($orgId, $userId, $cost, $operation, 'job:' . $ctx->job['id']);
-            $publicId = (string) $db->fetchValue('SELECT public_id FROM forms WHERE id = ? AND organization_id = ?', [$formId, $orgId]);
+            $credits->charge($this->orgId, $this->userId, $cost, $operation, 'job:' . $ctx->job['id']);
+            $publicId = (string) $db->fetchValue('SELECT public_id FROM forms WHERE id = ? AND organization_id = ?', [$formId, $this->orgId]);
 
             return JobResult::done([
                 'form_public_id' => $publicId,
@@ -206,6 +207,143 @@ final class FormGenerationHandler implements JobHandler
         } catch (ImmutableVersionException) {
             return JobResult::done(['error' => 'not_draft']);
         }
+    }
+
+    /** A short step fits when the process has no time limit (CRON) or enough time left (web). */
+    private function canStart(): bool
+    {
+        return $this->ctx->canRunLong() || $this->ctx->secondsLeft() >= $this->ctx->app->config()->int('ai.step_seconds.form_part', 20);
+    }
+
+    private function call(string $operation, string $promptName, string $user, string $tokensKey): AiResponse
+    {
+        $system = (string) file_get_contents($this->ctx->app->root . '/app/Prompts/' . $promptName . '.v1.md');
+        $tokens = $this->ctx->app->config()->int('ai.max_tokens.' . $tokensKey, 3000);
+
+        return $this->gateway->complete($operation, 'form', $system, $user, $tokens, $this->orgId, $this->userId, (int) $this->ctx->job['id'], $this->ctx->canRunLong() ? null : $this->ctx->deadline());
+    }
+
+    /**
+     * @param array<string, mixed> $p
+     * @param array<string, mixed> $progress
+     *
+     * @return array{group: array<string, mixed>, choice_lists: array<string, mixed>}|null
+     */
+    private function writeSection(array $p, array $progress, int $index): ?array
+    {
+        $section = $progress['todo'][$index];
+        $user = $this->briefText($p, $progress['languages'])
+            . "\nPlan complet :\n" . json_encode($progress['plan'], JSON_UNESCAPED_UNICODE)
+            . "\n\nSection à rédiger maintenant (" . ($index + 1) . '/' . count($progress['todo']) . ") :\n" . json_encode($section, JSON_UNESCAPED_UNICODE)
+            . "\n\nIdentifiants déjà utilisés (interdits) : " . implode(', ', $this->usedNames($progress['done']))
+            . "\nListes de choix déjà définies (réutilisables) : " . json_encode($this->knownLists($progress['done']), JSON_UNESCAPED_UNICODE);
+        $answer = $this->call('form_section', 'form_section', $user, 'form_section')->json();
+
+        return $answer === null ? null : FormAssembler::section($answer, (string) ($section['name'] ?? 'section_' . ($index + 1)), (string) ($section['title'] ?? 'Section ' . ($index + 1)), $progress['languages'][0]);
+    }
+
+    /**
+     * @param array<string, mixed> $p
+     * @param array<string, mixed> $progress
+     *
+     * @return array{group: array<string, mixed>, choice_lists: array<string, mixed>}|null
+     */
+    private function revisePart(array $p, array $progress, int $index): ?array
+    {
+        $part = $progress['todo'][$index];
+        $user = "Consigne :\n" . mb_substr((string) ($p['instruction'] ?? ''), 0, 2000)
+            . "\n\nLangues du questionnaire : " . implode(', ', $progress['languages'])
+            . "\nAperçu du questionnaire :\n" . $progress['outline']
+            . "\n\nListes de choix utilisées par cette partie : " . json_encode($part['choice_lists'], JSON_UNESCAPED_UNICODE)
+            . "\n\nPartie " . ($index + 1) . '/' . count($progress['todo']) . " :\n" . json_encode($part['group'], JSON_UNESCAPED_UNICODE);
+        $answer = $this->call('form_revision', 'form_item_revise', $user, 'form_item')->json();
+
+        return $answer === null ? null : FormAssembler::item($answer, $part);
+    }
+
+    /**
+     * @param array<string, mixed> $progress
+     *
+     * @return array{0: string, 1: FormValidationResult}
+     */
+    private function assemble(array $progress, FormValidator $validator): array
+    {
+        $languages = $progress['languages'];
+        if ($progress['mode'] === 'revise') {
+            $languages = $this->withNewLanguages($languages, $progress['done']);
+        }
+        $form = FormAssembler::assemble($progress['done'], $progress['settings'], $languages);
+        $json = (string) json_encode($form, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        $result = $validator->validateJson($json);
+        if (!$result->isValid()) {
+            $fixed = (string) json_encode(FormAssembler::autofix(json_decode($json, true, 64, JSON_THROW_ON_ERROR)), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            $fixedResult = $validator->validateJson($fixed);
+            if ($fixedResult->isValid() || count($fixedResult->errors()) < count($result->errors())) {
+                return [$fixed, $fixedResult];
+            }
+        }
+
+        return [$json, $result];
+    }
+
+    /**
+     * Indexes of the top-level parts concerned by validation errors ("/items/3/…" → 3).
+     *
+     * @param list<array{path: string, code: string, message: string}> $errors
+     *
+     * @return list<int>
+     */
+    private function faultyParts(array $errors, int $count): array
+    {
+        $indexes = [];
+        foreach ($errors as $e) {
+            if (preg_match('#^/items/(\d+)#', $e['path'], $m) && (int) $m[1] < $count) {
+                $indexes[(int) $m[1]] = true;
+            }
+        }
+        ksort($indexes);
+
+        return array_keys($indexes);
+    }
+
+    /**
+     * A revision may add a language ("translate into English"): accept label codes it introduced.
+     *
+     * @param list<string> $languages
+     * @param list<array{group: array<string, mixed>, choice_lists: array<string, mixed>}> $parts
+     *
+     * @return list<string>
+     */
+    private function withNewLanguages(array $languages, array $parts): array
+    {
+        $found = [];
+        array_walk_recursive($parts, static function ($v, $k) use (&$found): void {
+            if (is_string($k) && preg_match('/^[a-z]{2,3}$/', $k) && is_string($v)) {
+                $found[$k] = true;
+            }
+        });
+        foreach (array_keys($found) as $code) {
+            if (!in_array($code, $languages, true) && in_array($code, ['fr', 'en', 'es', 'pt', 'de', 'ar', 'sw', 'wo', 'ff', 'ha', 'ln'], true)) {
+                $languages[] = $code;
+            }
+        }
+
+        return $languages;
+    }
+
+    /**
+     * Compact outline of a form for revision prompts: "path (type) : label".
+     *
+     * @param array<string, mixed> $form
+     */
+    private function outline(array $form): string
+    {
+        $lines = [];
+        foreach (FormSchema::questions($form) as $q) {
+            $lines[] = '- ' . $q['path'] . ' (' . $q['type'] . ') : ' . mb_substr($q['label'], 0, 120);
+        }
+
+        return implode("\n", array_slice($lines, 0, 200));
     }
 
     /**
@@ -304,28 +442,6 @@ final class FormGenerationHandler implements JobHandler
     }
 
     /**
-     * Server-side fixes that do not change meaning: schema version, languages, default language.
-     *
-     * @param array<string, mixed> $form
-     * @param list<string> $languages
-     *
-     * @return array<string, mixed>
-     */
-    private function normalize(array $form, array $languages, string $mode): array
-    {
-        $form['schema_version'] = '1.0';
-        if ($mode === 'generate') {
-            $form['languages'] = $languages;
-            $form['default_language'] = $languages[0];
-        }
-        if (!isset($form['choice_lists']) || $form['choice_lists'] === []) {
-            $form['choice_lists'] = new \stdClass();
-        }
-
-        return $form;
-    }
-
-    /**
      * @param array<string, mixed> $p
      *
      * @return list<string>
@@ -357,13 +473,14 @@ final class FormGenerationHandler implements JobHandler
     }
 
     /** @return array<string, mixed>|null the current draft version of the form */
-    private function currentDraft(JobContext $ctx, int $orgId, int $formId): ?array
+    private function currentDraft(int $formId): ?array
     {
-        $form = $ctx->app->db()->fetchOne('SELECT current_version_id FROM forms WHERE id = ? AND organization_id = ?', [$formId, $orgId]);
+        $db = $this->ctx->app->db();
+        $form = $db->fetchOne('SELECT current_version_id FROM forms WHERE id = ? AND organization_id = ?', [$formId, $this->orgId]);
         if ($form === null || $form['current_version_id'] === null) {
             return null;
         }
-        $version = (new FormRepository($ctx->app->db()))->findVersion($orgId, (int) $form['current_version_id']);
+        $version = (new FormRepository($db))->findVersion($this->orgId, (int) $form['current_version_id']);
 
         return $version !== null && $version['status'] === 'draft' ? $version : null;
     }

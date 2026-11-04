@@ -13,11 +13,9 @@ return [
     'timeout_seconds' => Env::int('AI_TIMEOUT_SECONDS', 120),
     // Minimum time a web request must have left to attempt a step itself; otherwise the CRON does it.
     'step_seconds' => [
-        'form_plan' => 20,
-        'form_section' => 20,
-        'form_generation' => 90,
-        'form_revision' => 90,
-        'form_repair' => 90,
+        // Every AI step is short (one section or one question): this much time left lets
+        // a web request run it itself, so no CRON is needed to create or revise a form.
+        'form_part' => 20,
     ],
     'daily_budget_usd_per_org' => (float) Env::get('AI_DAILY_BUDGET_USD_PER_ORG', '0.50'),
     // Model IDs as listed on https://model-explorer.mammouth.ai/ (checked 2026-11-04).
@@ -38,8 +36,7 @@ return [
     'max_tokens' => [
         'form_plan' => 1500,
         'form_section' => 3000,
-        'form_generation' => 9000,
-        'form_revision' => 9000,
+        'form_item' => 3000,
     ],
     // $ per million tokens [input, output] for every Mammouth model (config/ai_prices.php).
     'prices' => require __DIR__ . '/ai_prices.php',

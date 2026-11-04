@@ -457,4 +457,6 @@ return [
     'ai.error.bad_request' => 'Le service IA a refusé la demande (modèle inconnu ou paramètre invalide) : vérifiez les modèles AI_MODEL_* du fichier .env. Aucun crédit décompté.',
     'ai.step.sections' => 'Étape 2/3 : rédaction des questions (section :current sur :total)',
     'ai.job.long_running' => 'L\'étape en cours dure depuis :seconds s : l\'hébergeur a peut-être interrompu le traitement. Il sera relancé automatiquement (3 tentatives au maximum).',
+    'ai.step.revise_parts' => 'Étape 2/3 : modification (partie :current sur :total)',
+    'ai.job.keep_open' => 'Gardez cette page ouverte jusqu\'à la fin (1 à 2 minutes) : c\'est elle qui fait avancer la rédaction.',
 ];

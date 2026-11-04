@@ -46,7 +46,7 @@ final class JobContext
     {
         // CLI = CRON dispatcher (no time limit by default; never rely on max_execution_time
         // here, the script itself may have called set_time_limit()).
-        return $this->longRun ?? (PHP_SAPI === 'cli');
+        return $this->longRun ?? (PHP_SAPI === 'cli' || (str_starts_with(PHP_SAPI, 'cgi') && !isset($_SERVER['REQUEST_METHOD'])));
     }
 
     /**

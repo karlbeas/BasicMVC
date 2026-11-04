@@ -57,9 +57,10 @@ final class JobApiController extends Controller
             'notice' => null,
         ];
         $step = $data['step'];
-        if ($step === 'sections' && is_array($progress)) {
-            $data['step_text'] = t('ai.step.sections', ['current' => min(count((array) ($progress['done'] ?? [])) + 1, count((array) ($progress['sections'] ?? []))), 'total' => count((array) ($progress['sections'] ?? []))]);
-        } elseif (is_string($step) && in_array($step, ['plan', 'form', 'validate'], true)) {
+        if ($step === 'parts' && is_array($progress)) {
+            $current = min(count((array) ($progress['done'] ?? [])) + 1, count((array) ($progress['todo'] ?? [])));
+            $data['step_text'] = t(($progress['mode'] ?? '') === 'revise' ? 'ai.step.revise_parts' : 'ai.step.sections', ['current' => $current, 'total' => count((array) ($progress['todo'] ?? []))]);
+        } elseif (is_string($step) && in_array($step, ['plan', 'validate'], true)) {
             $data['step_text'] = t('ai.step.' . $step);
         } else {
             $data['step_text'] = t('ai.step.pending');
@@ -74,16 +75,11 @@ final class JobApiController extends Controller
                 $data['message'] .= ' (' . $detail . ')';
             }
         } elseif (in_array($job['status'], ['pending', 'running'], true)) {
-            $cronAge = Dispatcher::heartbeatAge($this->app);
             $runningFor = $job['reserved_at'] !== null ? time() - (int) strtotime($job['reserved_at'] . ' UTC') : 0;
-            if ($job['status'] === 'running' && $runningFor > 150) {
+            if ($job['status'] === 'running' && $runningFor > 90) {
                 $data['notice'] = t('ai.job.long_running', ['seconds' => $runningFor]);
             } elseif ($job['status'] === 'pending' && (int) $job['attempts'] > 0 && $lastError !== '') {
                 $data['notice'] = t('ai.job.retrying', ['attempt' => (int) $job['attempts'] + 1, 'max' => (int) $job['max_attempts'], 'error' => $lastError]);
-            } elseif ($data['elapsed'] > 45 && ($cronAge === null || $cronAge > 180)) {
-                $data['notice'] = t('ai.job.no_cron');
-            } elseif ($job['status'] === 'pending' && $data['elapsed'] > 20) {
-                $data['notice'] = t('ai.job.waiting_cron');
             }
         }
 

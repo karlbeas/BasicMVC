@@ -42,6 +42,60 @@ final class FormAssembler
     }
 
     /**
+     * Normalizes a revised or repaired part: {"item": {...}, "choice_lists": {...}} or {"unchanged": true}.
+     * Returns null when the answer is unusable.
+     *
+     * @param array<string, mixed> $answer
+     * @param array{group: array<string, mixed>, choice_lists: array<string, mixed>} $original
+     *
+     * @return array{group: array<string, mixed>, choice_lists: array<string, mixed>}|null
+     */
+    public static function item(array $answer, array $original): ?array
+    {
+        if (($answer['unchanged'] ?? false) === true) {
+            return $original;
+        }
+        $item = is_array($answer['item'] ?? null) ? $answer['item'] : (is_array($answer['group'] ?? null) ? $answer['group'] : (in_array($answer['kind'] ?? null, ['question', 'group'], true) ? $answer : null));
+        if ($item === null || !in_array($item['kind'] ?? null, ['question', 'group'], true) || !is_string($item['name'] ?? null)) {
+            return null;
+        }
+        if ($item['kind'] === 'group' && (!is_array($item['items'] ?? null) || $item['items'] === [])) {
+            return null;
+        }
+        $lists = is_array($answer['choice_lists'] ?? null) ? $answer['choice_lists'] : [];
+
+        // Lists the part still uses but the answer did not repeat: keep the original ones.
+        return ['group' => $item, 'choice_lists' => $lists + $original['choice_lists']];
+    }
+
+    /**
+     * Splits an existing form into parts (top-level items) with the choice lists each one uses.
+     *
+     * @param array<string, mixed> $form
+     *
+     * @return list<array{group: array<string, mixed>, choice_lists: array<string, mixed>}>
+     */
+    public static function parts(array $form): array
+    {
+        $lists = is_array($form['choice_lists'] ?? null) ? $form['choice_lists'] : [];
+        $parts = [];
+        foreach (is_array($form['items'] ?? null) ? $form['items'] : [] as $item) {
+            if (!is_array($item)) {
+                continue;
+            }
+            $used = [];
+            array_walk_recursive($item, static function ($v, $k) use (&$used): void {
+                if ($k === 'choices' && is_string($v)) {
+                    $used[$v] = true;
+                }
+            });
+            $parts[] = ['group' => $item, 'choice_lists' => array_intersect_key($lists, $used)];
+        }
+
+        return $parts;
+    }
+
+    /**
      * @param list<array{group: array<string, mixed>, choice_lists: array<string, mixed>}> $sections
      * @param array<string, mixed> $settings
      * @param list<string> $languages

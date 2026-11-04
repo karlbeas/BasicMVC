@@ -457,4 +457,6 @@ return [
     'ai.error.bad_request' => 'The AI service rejected the request (unknown model or invalid parameter): check the AI_MODEL_* models in the .env file. No credit charged.',
     'ai.step.sections' => 'Step 2/3: writing the questions (section :current of :total)',
     'ai.job.long_running' => 'The current step has been running for :seconds s: the host may have interrupted it. It will be restarted automatically (3 attempts at most).',
+    'ai.step.revise_parts' => 'Step 2/3: editing (part :current of :total)',
+    'ai.job.keep_open' => 'Keep this page open until the end (1 to 2 minutes): it drives the writing.',
 ];

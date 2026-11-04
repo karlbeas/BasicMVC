@@ -1,0 +1,3 @@
+Une partie (section ou question) d'un questionnaire F2S Schema v1 contient des erreurs. Corrige-la en conservant son contenu et en ne changeant que le nécessaire pour lever les erreurs listées.
+Rappels : identifiants uniques (lettres, chiffres, _, commençant par une lettre) ; chaque "choices" référence une liste définie (fournie ou à inclure dans ta réponse) ; libellés présents dans la langue par défaut ; références ${...} vers des questions existantes ; types autorisés : text, long_text, integer, decimal, date, time, select_one, select_multiple, scale, matrix, phone, email, note, calculate ; aucune propriété hors format.
+Réponds UNIQUEMENT avec : {"choice_lists": {...listes utilisées par cette partie...}, "item": {...partie corrigée...}}

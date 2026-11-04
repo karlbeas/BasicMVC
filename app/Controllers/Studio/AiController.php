@@ -108,6 +108,8 @@ final class AiController extends Controller
         return $this->view('ai/job', [
             'job' => $job,
             'mode' => str_ends_with((string) $job['type'], 'revise') ? 'revise' : 'generate',
+            // Without a working CRON the job only progresses while this page is open.
+            'cronAlive' => ($age = \App\Jobs\Dispatcher::heartbeatAge($this->app)) !== null && $age < 180,
             'scripts' => ['js/f2s-jobs.js'],
         ]);
     }

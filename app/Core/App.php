@@ -212,9 +212,10 @@ final class App
                 && !str_starts_with($request->path, '/assets/')) {
                 return $this->withSecurityHeaders(Response::redirect($this->url('install')));
             }
-            // After an update, until the CRON applies the new migrations: maintenance page.
+            // After an update (zip extracted over the install): the first visit applies the
+            // quick migrations itself — no CRON needed; maintenance page only if that fails.
             if (is_file($this->root . '/.env') && !str_starts_with($request->path, '/cron/') && !str_starts_with($request->path, '/assets/')
-                && !$this->schemaUpgrader()->upToDateMarker() && !$this->schemaUpgrader()->isUpToDate()) {
+                && $this->schemaPending()) {
                 return $this->withSecurityHeaders($this->errorResponse($request, 503)->withHeader('Retry-After', '60'));
             }
             $route = $this->router()->match($request->method, $request->path);
@@ -257,6 +258,24 @@ final class App
         }
 
         return $this->withSecurityHeaders($response);
+    }
+
+    /** True if migrations are still pending after trying to apply them. */
+    private function schemaPending(): bool
+    {
+        $upgrader = $this->schemaUpgrader();
+        if ($upgrader->upToDateMarker() || $upgrader->isUpToDate()) {
+            return false;
+        }
+        try {
+            $upgrader->upgrade();
+        } catch (\Throwable $e) {
+            $this->logger()->error('Schema upgrade failed', ['error' => $e->getMessage()]);
+
+            return true;
+        }
+
+        return !$upgrader->upToDateMarker();
     }
 
     public function errorResponse(Request $request, int $status, ?string $detail = null): Response
